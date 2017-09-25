@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <windows.h>
+#include <time.h>
 
 //---------------|| Map datatypes			 	||----------
 
@@ -62,11 +63,12 @@ struct zonemap *zorigin;
 void uexit();//user selected exit
 void uabout();//the about section of the program
 int getmenu();//display splash menu and get first input from user
+int fetchint();
 
 //---------------|| creation function prototypes 	||--------------
 void gmapcreate(struct galmap *,struct sysmap *,struct zonemap *);//the pointers are passed to set them up, in create they serve no purpose other than to be populated
 void blankmap(struct galmap *,struct sysmap *,struct zonemap *);	//blank map generation
-void randmap(struct galmap *,struct sysmap *,struct zonemap *);	//Map creation populated procedurally
+void randmap(struct galmap *,struct sysmap *,struct zonemap *, int);//Map creation populated procedurally the integer is used when the function is called due to invalid input, 0 means cold run, 1 means it's been run once already
 
 //The node creation functions will accept a target node and interger ranging from 1-3 1: delete current 2: pre insert 3: post insert
 struct galmap * gnodemanip(struct galmap *, int);	//node creation: galaxy map
@@ -105,7 +107,7 @@ void blankmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *
 	{
 		for(int j = 0;j<10;j++)
 		{
-			ginitial->gmapover[i][j] = (j+48);
+			ginitial->gmapover[i][j] = (j+48+i);
 		}
 	}
 	sinitial = (struct sysmap *) malloc(sizeof(struct sysmap));	//allocate memory and assign pointer
@@ -116,7 +118,7 @@ void blankmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *
 	{
 		for(int j = 0;j<6;j++)
 		{
-			sinitial->sysmapc[i][j] = (j+48);
+			sinitial->sysmapc[i][j] = (j+48+i);
 		}
 	}
 	zinitial = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
@@ -125,15 +127,81 @@ void blankmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *
 	zorigin = zinitial;			//setting origin pointer
 	zinitial->z_coord[0] = 1;//debug
 	zinitial->z_coord[1] = 1;//debug
-	originprint();
+	//originprint();
 }
 
-void randmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial)
+void randmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial, int reused)
 {
-	blankmap(ginitial, sinitial, zinitial);//to keep the program slim, randmap will take blankmaps output and expand upon it
-	char g_mapproxy[10][10],s_mapproxy[6][6];
+	if(reused == 0){
+	blankmap(ginitial, sinitial, zinitial); system("CLS");}//to keep the program slim, randmap will take blankmaps output and expand upon it
+	char g_mapproxy[10][10],s_mapproxy[6][6], keyselect;// these arrays will be populated, then have their data dumped into the corresponding lists. the system map will be created and then dumped into a node in the list and the array will then be reused
+	for(int i = 0; i < 10; i++)//setting all indexes in the arrays to 0 to prevent and trash data from getting processed and to begin formatting the array for user presentation
+	{for(int j = 0; j < 10; j++){
+		if(i < 6 && j < 6)
+		{s_mapproxy[i][j] = 0;}
+	g_mapproxy[i][j] = 0;}
+	}
 	int randinhib = 50;//shortened rand inhibitor, it is made to act as a dynamic gate for the creation of galmap level systems, each time a system is created randinhib will increase, decreasing the chances of antoher system generating
 	int areabias = 0;// a bias to be used to modify randinhib, it's value changes depending on how many entities exist within a +-2 vertical/horizontal and +-1 diagonal diamond around select point system will only reachout one in all directions 
+	int x_initial = 2, y_initial = 2, randkey = time(NULL);// randkey is a variable for the random output, at the start fo the function it will be used to store the seed for random which will be applied later
+	printf("Would you like to use a random seed or your own seed for the random generator? (Y/N)\n");
+	keyselect = getchar();
+	cinclean();
+	switch(keyselect)
+	{
+		case 'Y':
+		case 'y':
+			keyselect = 1;
+			break;
+		case 'N':
+		case 'n':
+			keyselect = 0;
+			break;
+		default:
+			system("CLS");
+			printf("\nInvalid input, please try agian.\n");
+			randmap(ginitial, sinitial, zinitial, 1);
+			break;
+	}	
+	if(keyselect == 1)
+	{
+		printf("\nPlease input a number within the range of +/-32,767\n");
+		randkey = fetchint();
+	}
+	srand(randkey);
+	for(int x=0; x < 10; x++)//the X/Y only loops are for populating the map, everything within the y forloop is related to system generation
+	{
+		for(int y = 0; y < 10; y++)
+		{
+			for(int i = x-2; (x-2) <= i <= (x+2) && i < 10; i++)//due to the map being 10x10 the generation will check in a two layer square around the selected point for other objects within the area and will change the inhibitor variables to make it more difficult for a system to spawn for every system within the area
+			{
+				for(int j = y-2; (y-2) <= j <= (y+2) && j < 10; j++)// the and is there to prevent out of bounds array index
+				{
+					if(i < 0)// these two ifs are to prevent the program trying to access memory outside of the galaxy array
+					{i = 0;randinhib += abs(i)*2;}// randinhib offset to balance not checking multiple indexes that don't exist
+					if(j < 0)
+					{j = 0;randinhib += abs(j)*2;}
+					if(g_mapproxy[i][j] != 0)
+					{
+						randinhib += 2;//+2  due to randinhib starting at 50, with a +-2 x/y search area, it searches through 25-1(for the start point) indexxes, in a total population scenerio, rand inhib would be 100, leaving 0% chance of spawn beacause t would be 50/25 populated indexxes so every populated index increasses spawn chance by 2%.
+						}
+				}
+			}
+			/*
+			this area will contain the code to generate the chance of a system spawning, and setting it in the array, and then clearing the inhibitor variables and manipulating any other data
+			*/
+			randkey = rand()%100;
+			if(randkey > randinhib)
+			{
+				g_mapproxy[x][y] = 'S';
+			}
+			randinhib = 50;
+		}
+	}
+	for(int x = 0; x < 10; x++)
+	{for(int y = 0; y < 10;y++)
+	{printf("\nprint\n");galorigin->gmapover[x][y] = g_mapproxy[x][y];}}//trying to edit galorigin through ginitial causes the program to hang, and windows will eventually close it, procedural works even if editing ginitial doesn't for the moment
+	originprint();
 }
 
 void gmapcreate(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial)
@@ -151,7 +219,7 @@ void gmapcreate(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap
 	switch(uselect)	//selection
 	{
 		case 1:		//Creation(Random)
-			randmap(ginitial, sinitial, zinitial);
+			randmap(ginitial, sinitial, zinitial, 0);
 			break;
 		case 2:		//Creation(Blank)
 			blankmap(ginitial, sinitial, zinitial);
@@ -166,7 +234,7 @@ void gmapcreate(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap
 
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	functions that do not manipulate data are below 	||--------------------------------------
-//---------------|| 							 							||--------------------------------------
+//---------------|| 	functions for data input are also below				||--------------------------------------
 
 int getmenu()
 {
@@ -224,7 +292,7 @@ void uabout()
 void cinclean()
 {
 	char trash = getchar();
-	while(trash != '\n' || 0)
+	while(trash != '\n' || trash == 0)
 	{
 		trash = getchar();
 	}
@@ -271,43 +339,34 @@ void originprint()
 	system("pause");
 }
 
+int fetchint()
+{
+	int uinput = 0, index = 0, signbool = 0;
+	char charinput = getchar();
+	while(charinput != 0 || charinput != '\n' && index < 11)
+	{
+		if(charinput == '-')
+		{signbool == 1;continue;}
+		uinput += (charinput - 48);
+		index++;
+		if(index != 10)
+		{uinput = uinput * 10;}
+	}
+	cinclean();
+	return uinput;
+}
 /*
-struct econode * createnode(struct econode * previous)  //function to create nodes
-{
-	struct econode * createdaddr;
-	//printf("malloc ping");
-	createdaddr = (struct econode *) malloc(sizeof(struct econode));  //reserving memory space for a node
-	//printf("malloc post");
-	if(createdaddr == (struct econode *)NULL)			//check if malloc returned an error
-	{
-		//printf("malloc dmg");
-		return createdaddr;		//return NULL if error occured, error will be handled outside of creation function
-	}
-	//printf("malloc success, address is: %p", createdaddr);
-	createdaddr->prevnode = previous;	//set previous nodes address
-	createdaddr->nextnode = NULL;
-	//printf("prev addressing success");
-	return createdaddr;
-}
-void deletenode(struct econode * dlttarget)	//delete function
-{
-	struct econode *previous, *next;	//declare pointers to link previous and next node
-	//printf("node to delete is at: %p",dlttarget);
-	if(dlttarget->prevnode != NULL && dlttarget->nextnode != NULL)
-	{
-		previous = dlttarget->prevnode;	//begin deletion, and linking process for a node inbetween other nodes
-		next = dlttarget->nextnode;
-		previous->nextnode = next;
-		next->prevnode = previous;
-	}
-	if(dlttarget->prevnode == NULL && dlttarget->nextnode != NULL) //no previous node exist, next becomes top of stack
-	{
-		next->prevnode = NULL;		//set next node to starting node
-	}
-	if(dlttarget->prevnode != NULL && dlttarget->nextnode == NULL) //no next node exists previous becomes bottom of stack
-	{
-		previous->nextnode = NULL;	//set previous node to final node
-	}
-	free(dlttarget);
-}
+
+
+first procedural output:
+S       S       S S
+S     S     S     S
+            S
+        S   S     S
+      S S   S S S
+    S     S   S   S
+S     S   S S S
+              S S S
+  S         S     S
+          S       S
 */
