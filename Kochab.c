@@ -239,7 +239,6 @@ int getmenu()
 		printf("Input value is invalid, please try agian.\n\n");
 		uselect = getmenu();	//reaqcuire input
 	}
-	//printf("\nYou input: %d\n",uselect);	//debugging
 	switch(uselect)			//selection
 	{
 		case 1:		//Creation
@@ -332,22 +331,30 @@ int fetchint()
 {
 	int uinput = 0, index = 0, signbool = 0;
 	char charinput = getchar();
-	while(charinput != 0 || charinput != '\n' && index < 11)
+	while(charinput != 0 && charinput != 10 && index < 11)
 	{
+		printf("ping %d: char is: %d\n",index,charinput);
 		if(charinput == '-')
 		{signbool == 1;continue;}
 		uinput += (charinput - 48);
 		index++;
 		if(index != 10)
 		{uinput = uinput * 10;}
+		charinput = getchar();
+		if(charinput == '\n')
+		{uinput = uinput / 10;}
 	}
-	cinclean();
+	printf("\nFetchint reports a result of: %d\n",uinput);// debug for seed value remove once randmap is complete
 	return uinput;
 }
 /*
 note too self: passing a pointer too a function does not work like a pass by reference
 
-first procedural output:
+current known bugs:
+when about or any other input at main menu would create multiple recursive copies of main menu, upon completion of map generatio, the print function will be run multiple times as execution traverses the multiple copies of the menu function
+
+
+first procedural output:(has sentimental value?)
 S       S       S S
 S     S     S     S
             S
@@ -361,20 +368,18 @@ S     S   S S S
 */
 
 /*
-temp debuggin trash
- the address of galorigin address is 000000000060FDE0
-
- the address of galorigin address is 000000000060FE00
-
- the address of galorigin address is 000000000060FE00
-
- the address of galorigin address is 0000000000000000
-
- the address of galorigin address is 00000000004089A0
-
- the address of galorigin address is 0000000000000000
-
- 
- 
- 000000000060FD80
+Fetchint reports a result of: 10
+Beginning origin node printing...
+galorigin array dump is:
+S S S S S S       S
+S       S S S
+S S S       S S S S
+S   S   S S   S S
+  S S S       S   S
+S             S
+      S       S S
+      S S     S S
+S   S S S S     S
+  S S S   S S S   S
+  
 */
