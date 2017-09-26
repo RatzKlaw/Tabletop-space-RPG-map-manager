@@ -98,48 +98,38 @@ int main()
 
 void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers
 {
-	galmap_dt * ginitialtwo = (galmap_dt *) malloc(sizeof(galmap_dt));	//allocate memory and assign pointer
-	ginitialtwo->g_nextnode = NULL;	//set previous nodes address
-	ginitialtwo->g_prevnode = NULL;	//set next nodes address
-	// debug functions will follow after origin set, they will populate the arrays of the initial node, which will be printed outside of blankmap
+	*ginitial = (galmap_dt *) malloc(sizeof(galmap_dt));	//allocate memory and assign pointer
+	(*ginitial)->g_nextnode = NULL;	//set previous nodes address
+	(*ginitial)->g_prevnode = NULL;	//set next nodes address
 	for(int i = 0;i< 10;i++)//debug
 	{
 		for(int j = 0;j<10;j++)
 		{
-			ginitialtwo->gmapover[i][j] = (j+48+i);
+			(*ginitial)->gmapover[i][j] = 0;
 		}
 	}
-	*ginitial = ginitialtwo;
-	sysmap_dt * sinitialtwo = (sysmap_dt *) malloc(sizeof(sysmap_dt));	//allocate memory and assign pointer
-	sinitialtwo->s_nextnode = NULL;	//set previous nodes address
-	sinitialtwo->s_prevnode = NULL;	//set next nodes address
+	*sinitial = (sysmap_dt *) malloc(sizeof(sysmap_dt));	//allocate memory and assign pointer
+	(*sinitial)->s_nextnode = NULL;	//set previous nodes address
+	(*sinitial)->s_prevnode = NULL;	//set next nodes address
 	for(int i = 0;i< 6;i++)//debug
 	{
 		for(int j = 0;j<6;j++)
 		{
-			sinitialtwo->sysmapc[i][j] = (j+48+i);
+			(*sinitial)->sysmapc[i][j] = (j+48+i);//currently unknown about what format data in sysmap will be, leave this as a placeholder
 		}
 	}
-	*sinitial = sinitialtwo;
-	zonemap_dt *zinitialtwo = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
-	zinitialtwo->z_nextnode = NULL;	//set previous nodes address
-	zinitialtwo ->z_prevnode = NULL;	//set next nodes address
-	zinitialtwo->z_coord[0] = 1;//debug
-	zinitialtwo->z_coord[1] = 1;//debug
-	*zinitial = zinitialtwo;
+	*zinitial = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
+	(*zinitial)->z_nextnode = NULL;	//set previous nodes address
+	(*zinitial)->z_prevnode = NULL;	//set next nodes address
+	(*zinitial)->z_coord[0] = 1;//debug
+	(*zinitial)->z_coord[1] = 1;//debug
 }
 
 void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, int reused)
 {
 	if(reused == 0){
 	blankmap(*&ginitial, *&sinitial, *&zinitial); system("CLS");}//to keep the program slim, randmap will take blankmaps output and expand upon it
-	char g_mapproxy[10][10],s_mapproxy[6][6], keyselect;// these arrays will be populated, then have their data dumped into the corresponding lists. the system map will be created and then dumped into a node in the list and the array will then be reused
-	for(int i = 0; i < 10; i++)//setting all indexes in the arrays to 0 to prevent and trash data from getting processed and to begin formatting the array for user presentation
-	{for(int j = 0; j < 10; j++){
-		if(i < 6 && j < 6)
-		{s_mapproxy[i][j] = 0;}
-	g_mapproxy[i][j] = 0;}
-	}
+	char keyselect;//variable for user input
 	int randinhib = 50;//shortened rand inhibitor, it is made to act as a dynamic gate for the creation of galmap level systems, each time a system is created randinhib will increase, decreasing the chances of antoher system generating
 	int areabias = 0;// a bias to be used to modify randinhib, it's value changes depending on how many entities exist within a +-2 vertical/horizontal and +-1 diagonal diamond around select point system will only reachout one in all directions 
 	int x_initial = 2, y_initial = 2, randkey = time(NULL);// randkey is a variable for the random output, at the start fo the function it will be used to store the seed for random which will be applied later
@@ -180,7 +170,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 					{i = 0;randinhib += abs(i)*2;}// randinhib offset to balance not checking multiple indexes that don't exist
 					if(j < 0)
 					{j = 0;randinhib += abs(j)*2;}
-					if(g_mapproxy[i][j] != 0)
+					if((*ginitial)->gmapover[x][y] != 0)
 					{
 						randinhib += 2;//+2  due to randinhib starting at 50, with a +-2 x/y search area, it searches through 25-1(for the start point) indexxes, in a total population scenerio, rand inhib would be 100, leaving 0% chance of spawn beacause t would be 50/25 populated indexxes so every populated index increasses spawn chance by 2%.
 						}
@@ -192,14 +182,11 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 			randkey = rand()%100;
 			if(randkey > randinhib)
 			{
-				g_mapproxy[x][y] = 'S';
+				(*ginitial)->gmapover[x][y] = 'S';
 			}
 			randinhib = 50;
 		}
 	}
-	for(int x = 0; x < 10; x++)
-	{for(int y = 0; y < 10;y++)
-	{/*printf("\nprint\n");*//*galorigin->gmapover[x][y] = g_mapproxy[x][y];*/}}//trying to edit galorigin through ginitial causes the program to hang, and windows will eventually close it, procedural works even if editing ginitial doesn't for the moment
 }
 
 void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial)
