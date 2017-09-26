@@ -17,29 +17,29 @@
 //develope a ratio for procedural generation, player interaction will not be resisted, but the generator being able to populate the whole map and submaps is outlandish
 //for user input involving the maps or more, build a function to grab characters from the cin buffer and convert them to a single integer
 
-struct galmap 					//struct for galaxy map, currently seems unnessecary, may be kept, may not
+typedef struct galmap 					//struct for galaxy map, currently seems unnessecary, may be kept, may not
 {
 	char gmapover[10][10];			//galaxy map overview 25x25 system map
 	struct galmap *g_nextnode;		//points to next node
 	struct galmap *g_prevnode;		//adding previous node pointer incase a failsafe is needed, if not pointer will be removed when program is finished
-};
+}galmap_dt;
 
-struct sysmap
+typedef struct sysmap
 {
 	int sm_coord[2];				//this is the coordinate of a system/zone in (x,y) coordinate format index 0 is x, 1 is y
 	char sysmapc[6][6];			//this is a sub map, specifically zones within a system
 	char s_descrip[255];			//description of the currently selected system
 	struct sysmap *s_nextnode;		
 	struct sysmap *s_prevnode;
-};
+}sysmap_dt;
 
-struct zonemap
+typedef struct zonemap
 {
 	int z_coord[2];				//same as sysmap's sm_coord
 	char z_descrip[255];
 	struct zonemap *z_nextnode;
 	struct zonemap *z_prevnode;
-};
+}zonemap_dt;
 /*
 struct zonecontent					//pulled because of memory limitations
 {
@@ -66,9 +66,9 @@ int getmenu();//display splash menu and get first input from user
 int fetchint();
 
 //---------------|| creation function prototypes 	||--------------
-void gmapcreate(struct galmap *,struct sysmap *,struct zonemap *);//the pointers are passed to set them up, in create they serve no purpose other than to be populated
-void blankmap(struct galmap *,struct sysmap *,struct zonemap *);	//blank map generation
-void randmap(struct galmap *,struct sysmap *,struct zonemap *, int);//Map creation populated procedurally the integer is used when the function is called due to invalid input, 0 means cold run, 1 means it's been run once already
+void gmapcreate(struct galmap **,struct sysmap **,struct zonemap **);//the pointers are passed to set them up, in create they serve no purpose other than to be populated
+void blankmap(struct galmap **,struct sysmap **,struct zonemap **);	//blank map generation
+void randmap(struct galmap **,struct sysmap **,struct zonemap **, int);//Map creation populated procedurally the integer is used when the function is called due to invalid input, 0 means cold run, 1 means it's been run once already
 
 //The node creation functions will accept a target node and interger ranging from 1-3 1: delete current 2: pre insert 3: post insert
 struct galmap * gnodemanip(struct galmap *, int);	//node creation: galaxy map
@@ -89,51 +89,50 @@ void originprint();
 int main()
 {
 	getmenu();	//Begin accepting user data
-	system("pause");
+	//system("pause");
 }
 
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	Creation functions are below					 	||--------------------------------------
 //---------------|| 							 							||--------------------------------------
 
-void blankmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers
+void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers
 {
-	ginitial = (struct galmap *) malloc(sizeof(struct galmap));	//allocate memory and assign pointer
-	ginitial->g_nextnode = NULL;	//set previous nodes address
-	ginitial->g_prevnode = NULL;	//set next nodes address
-	galorigin = ginitial;			//setting origin pointer
+	galmap_dt * ginitialtwo = (galmap_dt *) malloc(sizeof(galmap_dt));	//allocate memory and assign pointer
+	ginitialtwo->g_nextnode = NULL;	//set previous nodes address
+	ginitialtwo->g_prevnode = NULL;	//set next nodes address
 	// debug functions will follow after origin set, they will populate the arrays of the initial node, which will be printed outside of blankmap
 	for(int i = 0;i< 10;i++)//debug
 	{
 		for(int j = 0;j<10;j++)
 		{
-			ginitial->gmapover[i][j] = (j+48+i);
+			ginitialtwo->gmapover[i][j] = (j+48+i);
 		}
 	}
-	sinitial = (struct sysmap *) malloc(sizeof(struct sysmap));	//allocate memory and assign pointer
-	sinitial->s_nextnode = NULL;	//set previous nodes address
-	sinitial->s_prevnode = NULL;	//set next nodes address
-	sysorigin = sinitial;			//setting origin pointer
+	*ginitial = ginitialtwo;
+	sysmap_dt * sinitialtwo = (sysmap_dt *) malloc(sizeof(sysmap_dt));	//allocate memory and assign pointer
+	sinitialtwo->s_nextnode = NULL;	//set previous nodes address
+	sinitialtwo->s_prevnode = NULL;	//set next nodes address
 	for(int i = 0;i< 6;i++)//debug
 	{
 		for(int j = 0;j<6;j++)
 		{
-			sinitial->sysmapc[i][j] = (j+48+i);
+			sinitialtwo->sysmapc[i][j] = (j+48+i);
 		}
 	}
-	zinitial = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
-	zinitial->z_nextnode = NULL;	//set previous nodes address
-	zinitial->z_prevnode = NULL;	//set next nodes address
-	zorigin = zinitial;			//setting origin pointer
-	zinitial->z_coord[0] = 1;//debug
-	zinitial->z_coord[1] = 1;//debug
-	//originprint();
+	*sinitial = sinitialtwo;
+	zonemap_dt *zinitialtwo = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
+	zinitialtwo->z_nextnode = NULL;	//set previous nodes address
+	zinitialtwo ->z_prevnode = NULL;	//set next nodes address
+	zinitialtwo->z_coord[0] = 1;//debug
+	zinitialtwo->z_coord[1] = 1;//debug
+	*zinitial = zinitialtwo;
 }
 
-void randmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial, int reused)
+void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, int reused)
 {
 	if(reused == 0){
-	blankmap(ginitial, sinitial, zinitial); system("CLS");}//to keep the program slim, randmap will take blankmaps output and expand upon it
+	blankmap(*&ginitial, *&sinitial, *&zinitial); system("CLS");}//to keep the program slim, randmap will take blankmaps output and expand upon it
 	char g_mapproxy[10][10],s_mapproxy[6][6], keyselect;// these arrays will be populated, then have their data dumped into the corresponding lists. the system map will be created and then dumped into a node in the list and the array will then be reused
 	for(int i = 0; i < 10; i++)//setting all indexes in the arrays to 0 to prevent and trash data from getting processed and to begin formatting the array for user presentation
 	{for(int j = 0; j < 10; j++){
@@ -160,7 +159,7 @@ void randmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *z
 		default:
 			system("CLS");
 			printf("\nInvalid input, please try agian.\n");
-			randmap(ginitial, sinitial, zinitial, 1);
+			randmap(*&ginitial, *&sinitial, *&zinitial, 1);
 			break;
 	}	
 	if(keyselect == 1)
@@ -200,11 +199,10 @@ void randmap(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *z
 	}
 	for(int x = 0; x < 10; x++)
 	{for(int y = 0; y < 10;y++)
-	{printf("\nprint\n");galorigin->gmapover[x][y] = g_mapproxy[x][y];}}//trying to edit galorigin through ginitial causes the program to hang, and windows will eventually close it, procedural works even if editing ginitial doesn't for the moment
-	originprint();
+	{/*printf("\nprint\n");*//*galorigin->gmapover[x][y] = g_mapproxy[x][y];*/}}//trying to edit galorigin through ginitial causes the program to hang, and windows will eventually close it, procedural works even if editing ginitial doesn't for the moment
 }
 
-void gmapcreate(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap *zinitial)
+void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial)
 {
 	system("CLS");
 	printf("Galaxy Map Generator\n1: Create Randomly Populated map.\n2: Create blank map for user input.\n3: Return to Main Menu.\n");
@@ -213,16 +211,16 @@ void gmapcreate(struct galmap *ginitial, struct sysmap *sinitial, struct zonemap
 	while(uselect < 1 || uselect > 3)//check for invalid input
 	{	
 		printf("Input value is invalid, please try agian.\n\n");
-		gmapcreate(ginitial, sinitial, zinitial);;	//reaqcuire input
+		gmapcreate(*&ginitial, *&sinitial, *&zinitial);;	//reaqcuire input
 		return;
 	}
 	switch(uselect)	//selection
 	{
 		case 1:		//Creation(Random)
-			randmap(ginitial, sinitial, zinitial, 0);
+			randmap(*&ginitial, *&sinitial, *&zinitial, 0);
 			break;
 		case 2:		//Creation(Blank)
-			blankmap(ginitial, sinitial, zinitial);
+			blankmap(*&ginitial, *&sinitial, *&zinitial);
 			break;
 		case 3:		//Return
 			getmenu();
@@ -244,9 +242,9 @@ int getmenu()
 	printf("Tabletop space map generator and handler\n/\\  /\\\n\\|/\\|/\n  \\/\n\n");			//splash screen
 	printf("Selection is done through inputing the number that corresponds with menu choice\n");		//user prompt
 	printf("1: Create World.\n2: Load World.\n3: Download World.\n4: Upload World.\n5: About.\n6: Exit.\n");
-	struct galmap *gtransmute = NULL;//galmap transmutable
-	struct sysmap *stransmute = NULL;//sysmap transmutable
-	struct zonemap *ztransmute = NULL;//zonemap transmutable
+	galmap_dt *gtransmute = NULL;//galmap transmutable
+	sysmap_dt *stransmute = NULL;//sysmap transmutable
+	zonemap_dt *ztransmute = NULL;//zonemap transmutable
 	int uselect = getchar()-48;	//convert user input from ascii to signed integer
 	cinclean();
 	while(uselect < 1 || uselect > 6)//check for invalid input
@@ -258,7 +256,7 @@ int getmenu()
 	switch(uselect)			//selection
 	{
 		case 1:		//Creation
-			gmapcreate(gtransmute,stransmute,ztransmute);
+			gmapcreate(&gtransmute,&stransmute,&ztransmute);
 			break;
 		case 2:		//Load/Edit
 			undercon();
@@ -278,6 +276,10 @@ int getmenu()
 		default:
 			printf("\nUnknown input Error...\n");
 	}
+	galorigin = gtransmute;
+	sysorigin = stransmute;
+	zorigin = ztransmute;
+	originprint();
 	return uselect;
 }
 
@@ -356,7 +358,7 @@ int fetchint()
 	return uinput;
 }
 /*
-
+note too self: passing a pointer too a function does not work like a pass by reference
 
 first procedural output:
 S       S       S S
@@ -369,4 +371,23 @@ S     S   S S S
               S S S
   S         S     S
           S       S
+*/
+
+/*
+temp debuggin trash
+ the address of galorigin address is 000000000060FDE0
+
+ the address of galorigin address is 000000000060FE00
+
+ the address of galorigin address is 000000000060FE00
+
+ the address of galorigin address is 0000000000000000
+
+ the address of galorigin address is 00000000004089A0
+
+ the address of galorigin address is 0000000000000000
+
+ 
+ 
+ 000000000060FD80
 */
