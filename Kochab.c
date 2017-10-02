@@ -71,7 +71,7 @@ void blankmap(struct galmap **,struct sysmap **,struct zonemap **);	//blank map 
 void randmap(struct galmap **,struct sysmap **,struct zonemap **, int);//Map creation populated procedurally the integer is used when the function is called due to invalid input, 0 means cold run, 1 means it's been run once already
 
 //The node creation functions
-struct galmap * gnodecre(struct galmap **);	//node creation: galaxy map
+galmap_dt gnodecre(struct galmap **);	//node creation: galaxy map
 void snodecre(int16_t);	//node creation: system map
 void znodecre(int32_t);	//node creation: zone map
 
@@ -83,6 +83,9 @@ int znodedel(int32_t);
 int16_t coordcompress16(int,int);
 int32_t coordcompress32(int,int,int,int);
 
+//Load and save functions
+void loadmap();
+void savemap();
 
 //---------------|| Trash collection and debug functions 	||------------
 void cinclean();//clear cin buffer
@@ -93,7 +96,7 @@ void originprint();
 //PROGRAM START
 //
 
-int main()//*
+int main()
 {
 	getmenu();	//Begin accepting user data
 }
@@ -102,7 +105,7 @@ int main()//*
 //---------------|| 	Creation functions are below					 	||--------------------------------------
 //---------------|| 							 							||--------------------------------------
 
-void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers //*
+void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers
 {
 	*ginitial = (galmap_dt *) malloc(sizeof(galmap_dt));	//allocate memory and assign pointer
 	(*ginitial)->g_nextnode = NULL;	//set previous nodes address
@@ -132,7 +135,7 @@ void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **z
 	zorigin = (*zinitial);
 }
 
-void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, int reused)//*
+void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, int reused)// Randmap will need to be canibalized to create a function to be run to generate lists on command.
 {
 	if(reused == 0){
 	blankmap(*&ginitial, *&sinitial, *&zinitial); system("CLS");}//to keep the program slim, randmap will take blankmaps output and expand upon it
@@ -316,7 +319,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 	}
 }
 
-void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial)//*
+void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial)
 {
 	system("CLS");
 	printf("Galaxy Map Generator\n1: Create Randomly Populated map.\n2: Create blank map for user input.\n3: Return to Main Menu.\n");
@@ -349,9 +352,9 @@ void snodecre(int16_t compressedcoord)
 	sysmap_dt * newsnode = (sysmap_dt *) malloc(sizeof(sysmap_dt)), * tracker;
 	newsnode->s_nextnode = NULL;
 	newsnode->s_prevnode = NULL;
-	newsnode->scompress = compressedcoord;
+	newsnode->scompress = compressedcoord;//sets new node id tag
 	tracker = sysorigin;
-	while(tracker->s_nextnode != NULL)
+	while(tracker->s_nextnode != NULL)//finding end of list
 	{
 		tracker = tracker->s_nextnode;
 	}
@@ -362,8 +365,8 @@ void snodecre(int16_t compressedcoord)
 			newsnode->sysmapc[i][j] = 0;
 		}
 	}
-	tracker->s_nextnode = newsnode;
-	newsnode->s_prevnode = tracker;
+	tracker->s_nextnode = newsnode;//linking end of list
+	newsnode->s_prevnode = tracker;//linking end of list+1
 }
 
 void znodecre(int32_t compresscoord)
@@ -371,9 +374,9 @@ void znodecre(int32_t compresscoord)
 	zonemap_dt * newznode = (zonemap_dt *) malloc(sizeof(zonemap_dt)), * tracker;
 	newznode->z_nextnode = NULL;
 	newznode->z_prevnode = NULL;
-	newznode->zcompress = compresscoord;
+	newznode->zcompress = compresscoord;//set id tag
 	tracker = zorigin;
-	while(tracker->z_nextnode != NULL)
+	while(tracker->z_nextnode != NULL)//find end of list
 	{
 		tracker = tracker->z_nextnode;
 	}
@@ -381,7 +384,7 @@ void znodecre(int32_t compresscoord)
 	{
 		newznode->z_descrip[i] = 0;
 	}
-	tracker->z_nextnode = newznode;
+	tracker->z_nextnode = newznode;//linking new node to list
 	newznode->z_prevnode = tracker;
 }
 
@@ -393,12 +396,12 @@ int sysnodedel(int16_t findme)
 	int found = 0;
 	while(deleteme->scompress != findme && deleteme->s_nextnode != NULL)// finding target node within list
 	{
-		deleteme = deleteme->s_nextnode;
+		deleteme = deleteme->s_nextnode;//increment the delete, and sourounding nodes location in the list
 		nextme = deleteme->s_nextnode;
 		prevme = deleteme->s_prevnode;
-		found = 1;
+		found = 1;//setting return value to ok
 	}
-	if(found == 0)
+	if(found == 0)//if not found
 	{return 1;}
 	if(nextme == NULL && prevme != NULL)//turning trailer+1 node into trailer node
 	{
@@ -411,18 +414,18 @@ int sysnodedel(int16_t findme)
 	if(deleteme->s_nextnode == NULL && deleteme->s_prevnode == NULL)//deleting this will delete sys origin, don't delete, set to zero return value is 3, incase something requires feedback on what happened in teh delete
 	{
 		sysorigin->scompress = -1; //-1 in the compressed value will be used to determine that the node is clean
-		for(int i = 0; i < 6;i++)
+		for(int i = 0; i < 6;i++)//begin wiping node data
 			{for(int j = 0; j < 6; j++)
 				{sysorigin->sysmapc[i][j] = 0;}}
 		for(int i = 0; i < 255; i++)
 			{sysorigin->s_descrip[i] = 0;}
 		sysorigin->s_nextnode = NULL;		
-		sysorigin->s_prevnode = NULL;
-		return 3;
+		sysorigin->s_prevnode = NULL;//finish wiping data
+		return 3;//return 3 incase something later on needs to know if the first variable in the list has been cleared
 	}
 	if(deleteme->s_nextnode != NULL && deleteme->s_prevnode != NULL)//linking adjacent nodes
 	{
-		nextme->s_prevnode = prevme;
+		nextme->s_prevnode = prevme;//link surrounding nodes together rather than to node to delete
 		prevme->s_nextnode = nextme;
 	}
 	free(deleteme);//deleting node
@@ -430,14 +433,13 @@ int sysnodedel(int16_t findme)
 
 int znodedel(int32_t findme)
 {
-	printf("\ndel\n");
 	zonemap_dt * deleteme = zorigin;
 	zonemap_dt * nextme;
 	zonemap_dt * prevme;
 	int found = 0;
 	while(deleteme->zcompress != findme && deleteme->z_nextnode != NULL)// finding target node within list
 	{
-		deleteme = deleteme->z_nextnode;
+		deleteme = deleteme->z_nextnode;//increment delete and surrounding nodes position
 		nextme = deleteme->z_nextnode;
 		prevme = deleteme->z_prevnode;
 		found = 1;
@@ -455,15 +457,15 @@ int znodedel(int32_t findme)
 	if(deleteme->z_nextnode == NULL && deleteme->z_prevnode == NULL)//deleting this will delete sys origin, don't delete, set to zero return value is 3, incase something requires feedback on what happened in teh delete
 	{
 		zorigin->zcompress = -1; //-1 in the compressed value will be used to determine that the node is clean
-		for(int i = 0; i < 255; i++)
+		for(int i = 0; i < 255; i++)//begin wiping data
 			{zorigin->z_descrip[i] = 0;}
 		zorigin->z_nextnode = NULL;		
-		zorigin->z_prevnode = NULL;
-		return 3;
+		zorigin->z_prevnode = NULL;//finish wiping data
+		return 3;//return three incase soemthing needs to know the first node was wiped
 	}
 	if(deleteme->z_nextnode != NULL && deleteme->z_prevnode != NULL)//linking adjacent nodes
 	{
-		nextme->z_prevnode = prevme;
+		nextme->z_prevnode = prevme;//linking surounding nodes to exclude delete node
 		prevme->z_nextnode = nextme;
 	}
 	free(deleteme);//deleting node
@@ -471,28 +473,42 @@ int znodedel(int32_t findme)
 
 int16_t coordcompress16(int x, int y) // a single function that compresses two variables into a single variable while retaining data integrity
 {
-	int16_t returnvalue = 0;
-	returnvalue += x;
-	returnvalue = returnvalue<< 8;
-	returnvalue += y;
-	//printf("\nreturn value is: %d\n",returnvalue);
+	int16_t returnvalue = 0;//set value to return to zero so trash data doesn't influence result
+	returnvalue += x;//add x coord
+	returnvalue = returnvalue<< 8;//shift x coord left 8 bits (preserves data incase the return value needs to be deconstructed)
+	returnvalue += y;//add y
 	return returnvalue;
 }
 
 int32_t coordcompress32(int w, int x, int y, int z) // functions like the 16 bit versionbut is for a 32b lossless compress, w,x are the x,y coordinates in the system map, y,z are the coordinates for the zone
 {
-	int32_t returnvalue = 0;
-	returnvalue += coordcompress16(w,x);
-	returnvalue = returnvalue << 16;
-	returnvalue += coordcompress16(y,z);
+	int32_t returnvalue = 0;// spawn value of zero to return
+	returnvalue += coordcompress16(w,x);//calls the 16bit version(w is x1, x is y1(the global array coordinates))
+	returnvalue = returnvalue << 16;//shift to preserve data
+	returnvalue += coordcompress16(y,z);//(y is x2, and z is y2(local array coordinates))
 	return returnvalue;
+}
+
+
+//---------------|| 							 							||--------------------------------------
+//---------------|| 	load and save map functions below				 	||--------------------------------------
+//---------------|| 							 							||--------------------------------------
+
+void loadmap()
+{
+	
+}
+
+void savemap()
+{
+	
 }
 
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	functions that do not manipulate data are below 	||--------------------------------------
 //---------------|| 	functions for data input are also below				||--------------------------------------
 
-int getmenu()//*
+int getmenu()
 {
 	system("CLS");	//clear prompt to prevent excess clutter with multiple recursive calls
 	printf("To do: File I/O,Menu options, user identification, possible cryptographic functions involving I/O,Networking and sharing functions, set up keyboard macro for cd in cmd, anything i'm forgetting....\n");	
@@ -516,7 +532,7 @@ int getmenu()//*
 			gmapcreate(&gtransmute,&stransmute,&ztransmute);
 			break;
 		case 2:		//Load/Edit
-			undercon();
+			loadmap();
 			break;
 		case 3:		//Download
 			undercon();
@@ -541,7 +557,7 @@ int getmenu()//*
 	return uselect;
 }
 
-void uabout()//*
+void uabout()
 {
 	system("CLS");
 	printf("This program was made with the intention of being used with StarFinder.\nIt is built in an attempt to be open enough to allow usage with other games.\nThe C components are compiled using a Cygwin installed gcc (using Windows command prompt)\nCurrently has the system requirements of Windows operating system (oldest possible version unknown)and ~3-4GB of RAM(adjusted for windows and other programs usage)\ntested with and running successfully on:\n\nWindows 10 Home (64bit) install with 16GB of RAM.\n");// clean up this formatting 
@@ -549,7 +565,7 @@ void uabout()//*
 	getmenu();
 }
 
-void cinclean()//*
+void cinclean()
 {
 	char trash = getchar();
 	while(trash != '\n' || trash == 0)
@@ -559,14 +575,14 @@ void cinclean()//*
 	return;
 }
 
-void undercon()//*
+void undercon()
 {
 	printf("\n\nThis area is under construction, please try agian with a later version...\n");
 	system("pause");
 	getmenu();
 }
 
-void uexit()//*
+void uexit()
 {
 	printf("\nProgram will close in 5 seconds...\n");
 	Sleep(5000);
@@ -576,7 +592,7 @@ void uexit()//*
 void originprint()
 {
 	printf("Beginning origin node printing...\ngalorigin array dump is:\n");
-	for(int i = 0;i< 10;i++)
+	for(int i = 0;i< 10;i++)//begin printing elements in galaxy array
 	{
 		for(int j = 0;j<10;j++)
 		{
@@ -589,7 +605,7 @@ void originprint()
 	do {
 	printf("\nsysorigin's Scompress is: %d\n",sysorigin->scompress);
 	printf("s_nextnode is: %p\ns_prevnode is: %p\nsysorigin address is %p\n",sysorigin->s_nextnode,sysorigin->s_prevnode,sysorigin);
-	for(int i = 0;i< 6;i++)
+	for(int i = 0;i< 6;i++)//begin printing element in current nodes array
 	{
 		for(int j = 0;j<6;j++)
 		{
@@ -597,11 +613,13 @@ void originprint()
 		}
 		printf("\n");
 	}
-		sysorigin = sysorigin->s_nextnode;
+		sysorigin = sysorigin->s_nextnode;//traverse list to next node
 	}while(sysorigin->s_nextnode != NULL);//these are seperated becaus ethe final node has a null pointer and is not run within this loop
 	printf("\nsysorigin's Scompress is: %d\n",sysorigin->scompress);
 	printf("s_nextnode is: %p\ns_prevnode is: %p\nsysorigin address is %p\n",sysorigin->s_nextnode,sysorigin->s_prevnode,sysorigin);
-	for(int i = 0;i< 6;i++)
+	while(sysorigin->s_prevnode != NULL)//return to system start for zone print
+	{sysorigin = sysorigin->s_prevnode;}
+	for(int i = 0;i< 6;i++)//print final node
 	{
 		for(int j = 0;j<6;j++)
 		{
@@ -610,7 +628,7 @@ void originprint()
 		printf("\n");
 	}
 	printf("zorigin array dump is:\n");
-	do{
+	do{//begin printing zone nodes
 	printf("\nzcompress is: %d\tz_nextnode is: %p\nz_prevnode is: %p\n",zorigin->zcompress,zorigin->z_nextnode,zorigin->z_prevnode);
 	zorigin = zorigin->z_nextnode;}while(zorigin->z_nextnode != NULL);
 	system("pause");
@@ -619,19 +637,23 @@ void originprint()
 int fetchint()
 {
 	int uinput = 0, index = 0, signbool = 0;
-	char charinput = getchar();
+	char charinput = getchar();//lcv and input storage
 	while(charinput != 0 && charinput != 10 && index < 11)
 	{
-		if(charinput == '-')
+		if(charinput == '-' && index == 0)//identify negative in first position
 		{signbool == 1;continue;}
-		uinput += (charinput - 48);
-		index++;
-		if(index != 10)
+		if(charinput < 48 || charinput > 57)//skip non numeric input
+		{continue;}
+		uinput += (charinput - 48);//add input
+		index++;//inc lcv
+		if(index != 10)//shift values in uinput to add next value
 		{uinput = uinput * 10;}
-		charinput = getchar();
-		if(charinput == '\n')
+		charinput = getchar();//get next value for lcv
+		if(charinput == '\n')//prevents multiplying too many times
 		{uinput = uinput / 10;}
 	}
+	if(signbool == 1)//if input was negative
+	{uinput = uinput*-1;}
 	return uinput;
 }
 /*
