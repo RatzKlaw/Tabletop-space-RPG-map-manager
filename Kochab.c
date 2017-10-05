@@ -1,10 +1,11 @@
-//compile command: gcc C:\users\drekmyrkr\desktop\Kochab.c -o C:\users\drekmyrkr\desktop\Kochab.exe
-//c99 standard: gcc C:\users\drekmyrkr\desktop\Kochab.c -o C:\users\drekmyrkr\desktop\Kochab.exe -std=c99
+//compile command: gcc C:\users\drekmyrkr\desktop\Kochab\Kochab.c -o C:\users\drekmyrkr\desktop\Kochab\Kochab.exe
+//c99 standard: gcc C:\users\drekmyrkr\desktop\Kochab\Kochab.c -o C:\users\drekmyrkr\desktop\Kochab\Kochab.exe -std=c99
 #include <stdio.h>
 #include <stdlib.h>
 #include <windows.h>
 #include <time.h>
 #include <stdint.h>
+#include <dirent.h>
 
 //---------------|| Map datatypes			 	||----------
 
@@ -51,11 +52,11 @@ struct zonecontent					//pulled because of memory limitations
 	struct zonecontent *zc_prevnode;
 };*/
 
-//---------------|| global map pointers 		||--------------
+//---------------|| global map pointers and vars||--------------
 //this group of pointers should point to the first node of their respective linked list to act as redundancy
-struct galmap *galorigin;
-struct sysmap *sysorigin;
-struct zonemap *zorigin;
+struct galmap * galorigin;
+struct sysmap * sysorigin;
+struct zonemap * zorigin;
 
 //---------------|| Non-Main function map below ||--------------
 
@@ -64,6 +65,8 @@ void uexit();//user selected exit
 void uabout();//the about section of the program
 int getmenu();//display splash menu and get first input from user
 int fetchint();//user input, designed to handle small(16bit) integers
+char * stringcopy(char *);//accepts string, determines size, returns a pointer to allocated memory containing the argument string
+char * stringcombine(char *, char*);//combines two strings into a dynamically sized string
 
 //---------------|| creation function prototypes 	||--------------
 void gmapcreate(struct galmap **,struct sysmap **,struct zonemap **);//the pointers are passed to set them up, in create they serve no purpose other than to be populated
@@ -71,7 +74,7 @@ void blankmap(struct galmap **,struct sysmap **,struct zonemap **);	//blank map 
 void randmap(struct galmap **,struct sysmap **,struct zonemap **, int);//Map creation populated procedurally the integer is used when the function is called due to invalid input, 0 means cold run, 1 means it's been run once already
 
 //The node creation functions
-galmap_dt gnodecre(struct galmap **);	//node creation: galaxy map
+galmap_dt gnodecre(galmap_dt **);	//node creation: galaxy map
 void snodecre(int16_t);	//node creation: system map
 void znodecre(int32_t);	//node creation: zone map
 
@@ -295,7 +298,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 							if((*sinitial)->sysmapc[y][z] != 0)//this gives a node a id number, then creates and increments to the next
 							{
 								(*zinitial)->zcompress = coordcompress32(w,x,y,z);
-								znodecre(coordcompress32(w,x,y,z));
+								znodecre(-132);
 								(*zinitial) = (*zinitial)->z_nextnode;
 							}
 						}
@@ -312,7 +315,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 	{
 		(*zinitial) = (*zinitial)->z_prevnode;
 	}
-	//hold = znodedel(-132);//blocked due to how origin print currently works,, the znode portion has issues with it's logic i will fix this possibly, originprint is useful for debugging, but has no use beyond that
+	hold = znodedel(-132);//blocked due to how origin print currently works,, the znode portion has issues with it's logic i will fix this possibly, originprint is useful for debugging, but has no use beyond that
 	while ((*sinitial)->s_prevnode != NULL)//list reset
 	{
 		(*sinitial) = (*sinitial)->s_prevnode;
@@ -345,6 +348,7 @@ void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitia
 		default:
 			printf("\nUnknown input Error...\n");
 	}
+	savemap();
 }
 
 void snodecre(int16_t compressedcoord)
@@ -384,6 +388,7 @@ void znodecre(int32_t compresscoord)
 	{
 		newznode->z_descrip[i] = 0;
 	}
+	newznode->z_descrip[0] = 'P'; newznode->z_descrip[1] = 'H';
 	tracker->z_nextnode = newznode;//linking new node to list
 	newznode->z_prevnode = tracker;
 }
@@ -490,6 +495,8 @@ int32_t coordcompress32(int w, int x, int y, int z) // functions like the 16 bit
 }
 
 
+
+
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	load and save map functions below				 	||--------------------------------------
 //---------------|| 							 							||--------------------------------------
@@ -499,9 +506,165 @@ void loadmap()
 	
 }
 
-void savemap()
+void savemap()//add user input for a file name
 {
+	FILE * savetgt, * findme;//findme is a pointe rused to detemrine if a file already exists with the input name
+	char *D_name,ustring[3],file_name[256], * name_pointer;//max directory size of 260+1(nullbyte) filename will act as map name, to be saved first under the 'T' identifier (the other identifiers will be explained in the write portion of the function
+	int errorchk = 0;
+	galmap_dt * g_save = galorigin;
+	sysmap_dt * s_save = sysorigin;
+	zonemap_dt * z_save = zorigin;
+	/*
+		if a specific file directory is preferred, it follows the syntax of 'D_name = stringcopy("<directory path>");'
+	*/
+	//D_name = stringcopy("C:\\Users\\Default\\Documents\\KochabMapSave\0");//double slash is needed
+	//D_name = stringcopy("KochabMapSave\\\0");//disable which of these is not the preferred location
 	
+	//Note: while alot of effort went into the drive selection portions of this function, they will not be used, and will not be deleted incase they find use in later more advanced versions of the program
+/*	//they also proved to be an interesting learning experience that i would prefer not to delete (notepad++ note incase i forget, or am completely oblivious, this line is the head of the hidden code)
+	int errorchk = 0;
+	system("CLS");
+	printf("Preparing save functions...\nIs C:\\ the main system drive?(Y/N)\t(the boot disk(Windows specific))\n");// get input
+	do{
+		ustring[0] = getchar();ustring[1] = 0;//store input as null terminated string
+		ustring[2] = getchar();
+		errorchk = 0;
+		if(ustring[2] != 10 && ustring[2] != 0)//identifying multi-character inputs
+			{errorchk = 1;}
+		if(errorchk != 0)//do not clear cin if errorcheck cleared it
+			{cinclean();}
+		if(ustring[0] < 110)//this converts capital letters into lowercase
+		{
+			ustring[0] += 32;
+		}
+		if((ustring[0] != 'n' && ustring[0] != 'y') || errorchk == 1)//handles new input after user input is found invalid
+		{
+			printf("\nInvalid input. Please enter either a 'Y', or 'N' (this is not case sensative)\n");
+		}
+	}while((ustring[0] != 'n' && ustring[0] != 'y') || errorchk == 1);//check for invalid input
+	switch(ustring[0])
+	{
+		case 110://input of no
+			printf("\nPlease input main drive partition letter without punctuation (Z:\\ -> Z)\n");
+			do{//note to self, newer windows cna only handle 26 drives, found references to older versions being able to handle more
+				ustring[0] = getchar();ustring[1] = 0;//store input as null terminated string
+				ustring[2] = getchar();
+				errorchk = 0;
+				if(ustring[2] != 10 && ustring[2] != 0)//identifying multi-character inputs
+					{errorchk = 1;}
+				if(errorchk != 0)//do not clear cin if errorcheck cleared it
+					{cinclean();}
+				if(ustring[0] > 64 && ustring[0] < 91)//this converts capital letters into lowercase
+				{
+					ustring[0] += 32;
+				}
+				if((ustring[0] < 97 || ustring[0] > 122) || errorchk == 1)//handles new input after user input is found invalid
+				{
+					printf("\nInvalid input. Please enter a valid drive letter A-Z (this is not case sensative)\n");
+				}
+			}while((ustring[0] < 97 || ustring[0] > 122) || errorchk == 1);//check for invalid input
+			D_name[0] = (ustring[0]-32);
+			break;
+		case 121://input of yes
+			break;
+		default:
+			printf("\nCritical error occured... press any key to begin shutdown");
+			uexit();
+			break;
+	};*/
+	do{
+		D_name = stringcopy("KochabMapSave\\\0");
+		name_pointer = stringcopy("\0");
+		system("CLS");
+		printf("Preparing to save map, a name is required...\nThe name must be less than 251 characters in length. If your map name exceeds this amount, it will be truncated.\nAs well as not including '\"', '*', '/', ':', '<', '>', '?', '\\', or '|' .\nAny of these used as input will be excluded.\n");
+		int index = 0,nullfound = 0;
+		while(nullfound == 0 && index < 251)
+		{
+			file_name[index] = getchar();
+			if(file_name[index] == 34 || file_name[index] == 42 || file_name[index] == 47 || file_name[index] == 58 || file_name[index] == 60 || file_name[index] == 62 || file_name[index] == 63 || file_name[index] == 92 || file_name[index] == 124)
+			{
+				continue;
+			}
+			if(file_name[index] == '\0' || file_name[index] == '\n')
+			{
+				nullfound = 1;//sets lcv to exit loop
+				file_name[index] = 0;//guarentuees a null terminated string
+			}
+			index++;
+		}
+		name_pointer = stringcombine(file_name,".KMFX\0");//'(K)ochab (M)ap (F)ormat e(X)tension' file extension added, this is done due to some ransomware viruses targeting file extensions. this will hopefully prevent data loss if the computer is infected
+		printf("\nInput file name and extension is: %s\n",name_pointer);
+		D_name = stringcombine(D_name,name_pointer);
+		findme = fopen(D_name, "r");
+		if(findme != NULL)//if file found error checking
+		{
+			printf("\nA file exists with this name, would you like to overwrite this file? (Y/N)\n");//if an error is detected,  the directory string is not cleared, and the next input is appended  into the same string
+			do{
+				ustring[0] = getchar();ustring[1] = 0;//store input as null terminated string
+				ustring[2] = getchar();
+				errorchk = 0;
+				if(ustring[2] != 10 && ustring[2] != 0)//identifying multi-character inputs
+					{errorchk = 1;}
+				if(errorchk != 0)//do not clear cin if errorcheck cleared it
+					{cinclean();}
+				if(ustring[0] < 110)//this converts capital letters into lowercase
+					{ustring[0] += 32;}
+				if((ustring[0] != 'n' && ustring[0] != 'y') || errorchk == 1)//handles new input after user input is found invalid
+					{
+						printf("\nInvalid input. Please enter either a 'Y', or 'N' (this is not case sensative)\n");
+						index = 0;
+					}
+			}while((ustring[0] != 'n' && ustring[0] != 'y') || errorchk == 1);//check for invalid input
+		}
+	}while(findme != NULL && ustring[0] == 'n');
+	printf("\nSaving to the directory: <Current Working Directory>\\%s\n",D_name);
+	savetgt = fopen(D_name, "w");//this function lacks the ability to create the folder in the public documents if it doesn't exist find another way
+	fprintf(savetgt,"<T>\n%s\n",file_name);
+	while(1)
+	{
+		fprintf(savetgt,"<G>\n");
+		for(int i = 0; i < 10; i++)
+		{for(int j = 0; j < 10; j++)
+			{
+				fprintf(savetgt,"%c ",g_save->gmapover[i][j]);
+			}
+			fprintf(savetgt,"\n");
+		}
+		fprintf(savetgt,"\n");
+		if(g_save->g_nextnode == NULL)
+		{
+			break;
+		}
+		g_save = g_save->g_nextnode;
+	}
+	while(1)
+	{
+		fprintf(savetgt,"<S>\n%d\n%s\n",(s_save->scompress),(s_save->s_descrip));
+		for(int i = 0; i < 6; i++)
+		{for(int j = 0; j < 6; j++)
+			{
+				fprintf(savetgt,"%c ",s_save->sysmapc[i][j]);
+			}
+		}
+		fprintf(savetgt,"\n");
+		if(s_save->s_nextnode == NULL)
+		{
+			break;
+		}
+		s_save = s_save->s_nextnode;
+	}
+	while(1)
+	{
+		fprintf(savetgt,"<Z>\n%d\n%s\n",(z_save->zcompress),(z_save->z_descrip));
+		fprintf(savetgt,"\n");
+		if(z_save->z_nextnode == NULL)
+		{
+			break;
+		}
+		z_save = z_save->z_nextnode;
+	}
+	fclose(savetgt);
+	system("pause");
 }
 
 //---------------|| 							 							||--------------------------------------
@@ -515,13 +678,13 @@ int getmenu()
 	printf("Complete functions list: Menu(About, Exit)\n\n");
 	printf("Tabletop space map generator and handler\n/\\  /\\\n\\|/\\|/\n  \\/\n\n");			//splash screen
 	printf("Selection is done through inputing the number that corresponds with menu choice\n");		//user prompt
-	printf("1: Create World.\n2: Load World.\n3: Download World.\n4: Upload World.\n5: About.\n6: Exit.\n");
+	printf("1: Create World.\n2: Load World.\n3: Download World.\n4: Upload World.\n5: About.\n6: Exit.\n9: Crash test; currently savemap()\n");
 	galmap_dt *gtransmute = NULL;//galmap transmutable
 	sysmap_dt *stransmute = NULL;//sysmap transmutable
 	zonemap_dt *ztransmute = NULL;//zonemap transmutable
 	int uselect = getchar()-48;	//convert user input from ascii to signed integer
 	cinclean();
-	while(uselect < 1 || uselect > 6)//check for invalid input
+	while((uselect < 1 || uselect > 6) && uselect != 9)//check for invalid input
 	{	
 		printf("Input value is invalid, please try agian.\n\n");
 		uselect = getmenu();	//reaqcuire input
@@ -546,12 +709,13 @@ int getmenu()
 		case 6:		//Exit
 			uexit();
 			break;
+		case 9:
+			savemap();
+			uexit();
+			break;
 		default:
 			printf("\nUnknown input Error...\n");
 	}
-	galorigin = gtransmute;//redundancy assignment of start pointers
-	sysorigin = stransmute;
-	zorigin = ztransmute;
 	originprint();
 	system("pause");
 	return uselect;
@@ -613,24 +777,19 @@ void originprint()
 		}
 		printf("\n");
 	}
-		sysorigin = sysorigin->s_nextnode;//traverse list to next node
-	}while(sysorigin->s_nextnode != NULL);//these are seperated becaus ethe final node has a null pointer and is not run within this loop
-	printf("\nsysorigin's Scompress is: %d\n",sysorigin->scompress);
-	printf("s_nextnode is: %p\ns_prevnode is: %p\nsysorigin address is %p\n",sysorigin->s_nextnode,sysorigin->s_prevnode,sysorigin);
-	while(sysorigin->s_prevnode != NULL)//return to system start for zone print
-	{sysorigin = sysorigin->s_prevnode;}
-	for(int i = 0;i< 6;i++)//print final node
+	if((sysorigin->s_nextnode) == NULL)
 	{
-		for(int j = 0;j<6;j++)
-		{
-			printf("%c ",sysorigin->sysmapc[i][j]);
-		}
-		printf("\n");
+		break;
 	}
+	sysorigin = sysorigin->s_nextnode;//traverse list to next node
+	}while(1);//these are seperated becaus ethe final node has a null pointer and is not run within this loop
 	printf("zorigin array dump is:\n");
 	do{//begin printing zone nodes
 	printf("\nzcompress is: %d\tz_nextnode is: %p\nz_prevnode is: %p\n",zorigin->zcompress,zorigin->z_nextnode,zorigin->z_prevnode);
-	zorigin = zorigin->z_nextnode;}while(zorigin->z_nextnode != NULL);
+	if(zorigin->z_nextnode == NULL)
+	{break;}
+	zorigin = zorigin->z_nextnode;
+	}while(1);
 	system("pause");
 }
 
@@ -656,13 +815,86 @@ int fetchint()
 	{uinput = uinput*-1;}
 	return uinput;
 }
+
+char * stringcopy(char * s_source)
+{
+	int index = 0, stringlength = 0;
+	char * target;
+	while(s_source[index] != '\0')//get length of string to allocate proper amount of memory
+	{
+		stringlength++;
+		index++;
+	}
+	index = 0;
+	stringlength++;//account for the null byte
+	target = (char *) malloc(stringlength);// create array memory
+	while(index < stringlength)//copy
+	{
+		target[index] = s_source[index];
+		index++;
+	}
+	return target;
+}
+
+char * stringcombine(char * s_sourceone,char * s_sourcetwo)
+{
+	int index = 0, stringlength = 0;
+	char * target;
+	while(s_sourceone[index] != '\0')//get length of string one
+	{
+		stringlength++;
+		index++;
+	}
+	index = 0;
+	while(s_sourcetwo[index] != '\0')//get length of string one
+	{
+		stringlength++;
+		index++;
+	}
+	index = 0;
+	stringlength++;//account for the null byte
+	target = (char *) malloc(stringlength);// create array memory
+	while(index < stringlength)//copy
+	{
+		target[index] = s_sourceone[index];
+		if(target[index] == '\0')
+		{
+			for(int i = 0; i < (stringlength); i++)
+			{
+				target[index] = s_sourcetwo[i];
+				if(s_sourcetwo[i] == '\0')
+				{i += stringlength;}
+				index++;
+			}
+			index += stringlength;
+		}
+		index++;
+	}
+	return target;
+}
+
 /*
+Housecleaning todo:
+-comment the stringcombine/copy functions
+
+
+
 note too self: passing a pointer too a function does not work like a pass by reference
 
 current known bugs:
 when about or any other input at main menu would create multiple recursive copies of main menu, upon completion of map generatio, the print function will be run multiple times as execution traverses the multiple copies of the menu function
 
-
+sysorigin's Scompress is: 2055
+s_nextnode is: 00000000006D86D0
+s_prevnode is: 00000000006D7CD0
+sysorigin address is 00000000006D7E10
+    F A
+  D   P D F
+    F   A
+A S     D E
+          S
+        E
+		
 first procedural output:(has sentimental value?)
 S       S       S S
 S     S     S     S
