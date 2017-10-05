@@ -10,11 +10,17 @@ current to do list:
 -begin and finish a user edit function
 
 //-----/
+
 //----/
+
 //---/  Completed
+
 //---\
+
 //----\
+
 //-----\
+
 
 -blank map generation and the datatypes required
 
