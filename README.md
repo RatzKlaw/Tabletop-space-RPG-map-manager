@@ -3,7 +3,7 @@ Simple prompt based map manager built primarily for games like StarFinder
 
 //-------|  CURRENT STATUS:
 
-//-------|  Basic:     Incomplete, but alot of progress has been made(last major update: 10/4/2017 ~9:55PM)
+//-------|  Basic:     Incomplete, but alot of progress has been made(last major update: 10/14/2017 ~11:30PM)
 
 //-------|  Networked: Incomplete
 
