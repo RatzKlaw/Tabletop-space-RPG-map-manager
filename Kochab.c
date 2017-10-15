@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <windows.h>
 #include <time.h>
-#include <stdint.h>
-#include <dirent.h>
+#include <stdint.h>//for int_16/32
+//#include <dirent.h>
 
 //---------------|| Map datatypes			 	||----------
 
@@ -21,7 +21,7 @@
 
 typedef struct galmap 					//struct for galaxy map, currently seems unnessecary, may be kept, may not
 {
-	char gmapover[10][10];			//galaxy map overview 25x25 system map
+	char gmapover[10][10];			//galaxy map overview 10x10 system map
 	struct galmap *g_nextnode;		//points to next node
 	struct galmap *g_prevnode;		//adding previous node pointer incase a failsafe is needed, if not pointer will be removed when program is finished
 }galmap_dt;
@@ -89,6 +89,8 @@ int32_t coordcompress32(int,int,int,int);
 //Load and save functions
 void loadmap();
 void savemap();
+int ffetchint(FILE **);//file fetchint, fed a pointerpointer, this exists because sys and zone maps in load both use integers as compressed coordinates 
+char * ffetchstring(FILE **);//file fetch string, exists for same reason as ffetchint
 
 //---------------|| Trash collection and debug functions 	||------------
 void cinclean();//clear cin buffer
@@ -130,9 +132,15 @@ void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **z
 			(*sinitial)->sysmapc[i][j] = 0;//currently unknown about what format data in sysmap will be, leave this as a placeholder
 		}
 	}
+	for(int i = 0; i < 255; i++)
+	{
+		(*sinitial)->s_descrip[i] = 0;
+	}
+	(*sinitial)->s_descrip[0] = 'P';(*sinitial)->s_descrip[1] = 'H';
 	*zinitial = (struct zonemap *) malloc(sizeof(struct zonemap));	//allocate memory and assign pointer
 	(*zinitial)->z_nextnode = NULL;	//set previous nodes address
 	(*zinitial)->z_prevnode = NULL;	//set next nodes address
+	(*zinitial)->z_descrip[0] = 'P';(*zinitial)->z_descrip[1] = 'H';
 	galorigin = (*ginitial);//establishing list start to the redundancy pointers
 	sysorigin = (*sinitial);
 	zorigin = (*zinitial);
@@ -351,7 +359,7 @@ void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitia
 	savemap();
 }
 
-void snodecre(int16_t compressedcoord)
+void snodecre(int16_t compressedcoord)//don't forget agian that the first node not having null next and prev pointers will cause a segmentation fault
 {
 	sysmap_dt * newsnode = (sysmap_dt *) malloc(sizeof(sysmap_dt)), * tracker;
 	newsnode->s_nextnode = NULL;
@@ -369,6 +377,11 @@ void snodecre(int16_t compressedcoord)
 			newsnode->sysmapc[i][j] = 0;
 		}
 	}
+	for(int i = 0; i < 255; i++)//trash wipe
+	{
+		newsnode->s_descrip[i] = 0;
+	}
+	newsnode->s_descrip[0] = 'P';newsnode->s_descrip[1] = 'H';//insert placeholder
 	tracker->s_nextnode = newsnode;//linking end of list
 	newsnode->s_prevnode = tracker;//linking end of list+1
 }
@@ -388,7 +401,7 @@ void znodecre(int32_t compresscoord)
 	{
 		newznode->z_descrip[i] = 0;
 	}
-	newznode->z_descrip[0] = 'P'; newznode->z_descrip[1] = 'H';
+	newznode->z_descrip[0] = 'P'; newznode->z_descrip[1] = 'H';//insert placeholder
 	tracker->z_nextnode = newznode;//linking new node to list
 	newznode->z_prevnode = tracker;
 }
@@ -501,9 +514,148 @@ int32_t coordcompress32(int w, int x, int y, int z) // functions like the 16 bit
 //---------------|| 	load and save map functions below				 	||--------------------------------------
 //---------------|| 							 							||--------------------------------------
 
-void loadmap()
+void loadmap() //loads a map form a user selected file. should only be called by main menu
 {
-	
+	system("CLS");
+	FILE * opentgt;
+	char * file_name,fcintake[1], *stringbuffer;
+	_Bool findreturn = 0, LCV = 1;
+	WIN32_FIND_DATA findme_data;
+	HANDLE FindMeH = INVALID_HANDLE_VALUE;
+	int index = 1,uinput = 0,fintake = 0;
+	galmap_dt * g_open = (galmap_dt *) malloc(sizeof(galmap_dt));//node should be built before being loaded
+	sysmap_dt * s_open = (sysmap_dt *) malloc(sizeof(sysmap_dt));//currently the pointers are null unless load is called by somehting other than map
+	zonemap_dt * z_open = (zonemap_dt *) malloc(sizeof(zonemap_dt));//they may be something else, if so, they need to be wiped
+	s_open->s_nextnode = NULL;s_open->s_prevnode = NULL;
+	z_open->z_nextnode = NULL;z_open->z_prevnode = NULL;
+	for(int i = 0; i < 255;i++)
+	{s_open->s_descrip[i] = 0;z_open->z_descrip[i] = 0;}
+	galorigin = g_open;sysorigin = s_open; zorigin = z_open;//the create functions are dependent on the origin pointers for parsing the lists	
+	printf("Load selected...\nBeginning search for map files...\n");
+	file_name = stringcopy("KochabMapSave\\*.KMFX");
+	FindMeH = FindFirstFile(file_name, &findme_data);
+	if(FindMeH == INVALID_HANDLE_VALUE)
+	{
+		printf("Critical error: File/Directory not found or some other error occured...\nPress enter to return to the main menu...\n");
+		cinclean();
+		FindClose(FindMeH);
+		return;
+	}
+	while(LCV == 1)
+	{
+		file_name = stringcopy((findme_data.cFileName));//using data directly from the find data caused wierd, output, this is probably something i was doing wrong, implemented this work around to fix it
+		printf("Map %d's name is:\t%s\n",index,(file_name));
+		LCV = FindNextFileA(FindMeH, &findme_data);
+		index++;
+	}	
+	FindClose(FindMeH);
+	LCV = 1;
+	printf("%d: Exit to menu\nPlease enter the corresponding value to make a selection...\n",index);
+	do{
+		uinput = fetchint();
+		if(uinput < 0 || uinput > index)
+		{printf("Invalid selection, please try agian...\n");}
+	}while(uinput < 0 || uinput > index);//check for invalid input
+	//from here, use index and uinput to parse through the directory, pull the name of the file, and place it into a string for fstream to use to open the file
+	file_name = stringcopy("KochabMapSave\\*.KMFX");
+	FindMeH = FindFirstFile(file_name, &findme_data);
+	if(FindMeH == INVALID_HANDLE_VALUE)
+	{
+		printf("Critical error: File/Directory not found or some other error occured...\nPress enter to return to the main menu...\n");
+		cinclean();
+		FindClose(FindMeH);
+		return;
+	}
+	index = 1;
+	while(uinput != index && LCV == 1)
+	{
+		index++;
+		LCV = FindNextFileA(FindMeH, &findme_data);
+	}
+	if(LCV == 0 && uinput != index)//if FNF encountered an error and killed search execution early, run this
+	{
+		printf("Critical error: Some currently unkown error occured...\nPress enter to return to the main menu...\n");
+		cinclean();
+		FindClose(FindMeH);
+		return;	
+	}
+	//thinking it would be a nice touch of feedback to print file name that is being opened, add this at some point
+	file_name = stringcombine("KochabMapSave\\",(findme_data.cFileName));
+	opentgt = fopen(file_name,"r");
+	do
+	{
+		for(int i = 0; i < 2; i++)
+		{
+			fintake = fgetc(opentgt);
+			
+		}
+		index = fintake;//get data tag
+		fintake = fgetc(opentgt);fintake = fgetc(opentgt);//grab '>' and newline
+		if(index == (-1))
+		{
+			break;
+		}
+		switch(index)
+		{
+			case 84://<T>
+				do{//title currently is considered useless, this function discards it
+					fintake = fgetc(opentgt);
+				}while(fintake != '\n');
+				break;
+			case 71://<G>: a second node should not be required for gmap
+				for(int i = 0; i < 10; i ++)
+				{
+					for(int j = 0; j < 10; j++)
+					{
+						g_open->gmapover[i][j] = fgetc(opentgt);
+					}
+					fintake = fgetc(opentgt);//wipe newline character at end of row in save file
+				}
+				break;
+			case 83://<S>
+				s_open->scompress = ffetchint(&opentgt);
+				stringbuffer = ffetchstring(&opentgt);
+				for(int i = 0; i < 255; i++)
+				{
+					
+					s_open->s_descrip[i] = stringbuffer[i];
+					
+				}
+				for(int i = 0; i < 6; i++)
+				{
+					for(int j = 0; j < 6; j++)
+					{
+						s_open->sysmapc[i][j] = fgetc(opentgt);
+					}
+				}
+				fintake = fgetc(opentgt);
+				snodecre((int16_t) -132);//type cast for consistancy, and to make sure no issues occur
+				s_open = s_open->s_nextnode;
+				break;
+			case 90://<Z>
+				z_open->zcompress = ffetchint(&opentgt);
+				stringbuffer = ffetchstring(&opentgt);
+				for(int i = 0; i < 255; i++)
+				{
+					z_open->z_descrip[i] = stringbuffer[i];
+				}
+				znodecre((int16_t) -132);
+				z_open = z_open->z_nextnode;
+				break;
+			default:
+				printf("\nCritical read error: An error occured while reading from map file (node creation)...\npress enter to begin exit process...");
+				cinclean();
+				uexit();
+				break;
+		}
+	}while(1);//EOF is -1
+	sysnodedel((int16_t) -132);
+	znodedel((int32_t) -132);
+	FindClose(FindMeH);
+	fclose(opentgt);
+	printf("Search closed\n");
+	cinclean();
+	return;
 }
 
 void savemap()//add user input for a file name
@@ -626,11 +778,13 @@ void savemap()//add user input for a file name
 		for(int i = 0; i < 10; i++)
 		{for(int j = 0; j < 10; j++)
 			{
-				fprintf(savetgt,"%c ",g_save->gmapover[i][j]);
+				fprintf(savetgt,"%c",g_save->gmapover[i][j]);
 			}
-			fprintf(savetgt,"\n");
+			if(i < 9)
+			{
+				fprintf(savetgt,"\n");
+			}
 		}
-		fprintf(savetgt,"\n");
 		if(g_save->g_nextnode == NULL)
 		{
 			break;
@@ -639,14 +793,13 @@ void savemap()//add user input for a file name
 	}
 	while(1)
 	{
-		fprintf(savetgt,"<S>\n%d\n%s\n",(s_save->scompress),(s_save->s_descrip));
+		fprintf(savetgt,"\n<S>\n%d\n%s\n",(s_save->scompress),(s_save->s_descrip));
 		for(int i = 0; i < 6; i++)
 		{for(int j = 0; j < 6; j++)
 			{
-				fprintf(savetgt,"%c ",s_save->sysmapc[i][j]);
+				fprintf(savetgt,"%c",s_save->sysmapc[i][j]);
 			}
 		}
-		fprintf(savetgt,"\n");
 		if(s_save->s_nextnode == NULL)
 		{
 			break;
@@ -655,8 +808,7 @@ void savemap()//add user input for a file name
 	}
 	while(1)
 	{
-		fprintf(savetgt,"<Z>\n%d\n%s\n",(z_save->zcompress),(z_save->z_descrip));
-		fprintf(savetgt,"\n");
+		fprintf(savetgt,"\n<Z>\n%d\n%s",(z_save->zcompress),(z_save->z_descrip));
 		if(z_save->z_nextnode == NULL)
 		{
 			break;
@@ -666,6 +818,39 @@ void savemap()//add user input for a file name
 	fclose(savetgt);
 	system("pause");
 }
+
+char * ffetchstring(FILE ** opentgt)
+{
+	char fcintake[2], *retstring;
+	retstring = (char *) malloc(sizeof(char));
+	retstring[0] = 0;
+	fcintake[1] = 0;
+	fcintake[0] = fgetc((*opentgt));//fcintake was setup and used because string combine requires a char*
+	while(fcintake[0] != '\n' && fcintake[0] != (-1))
+	{
+		retstring = stringcombine(retstring,fcintake);//trying to access null pointer to get string, is good idea
+		fcintake[0] = fgetc((*opentgt));
+	}
+	return retstring;
+}
+
+int ffetchint(FILE ** opentgt)
+{
+	int uinput = 0;
+	char charinput = fgetc((*opentgt));;//lcv and input storage
+	while(charinput != 0 && charinput != 10)
+	{
+		if(charinput < 48 || charinput > 57)//skip non numeric input
+		{charinput = fgetc((*opentgt));continue;}
+		uinput += (charinput - 48);//add input
+		uinput = uinput * 10;
+		charinput = fgetc((*opentgt));//get next value for lcv
+		if(charinput == '\n')//prevents multiplying too many times
+		{uinput = uinput / 10;}
+	}
+	return uinput;
+}
+
 
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	functions that do not manipulate data are below 	||--------------------------------------
@@ -684,18 +869,21 @@ int getmenu()
 	zonemap_dt *ztransmute = NULL;//zonemap transmutable
 	int uselect = getchar()-48;	//convert user input from ascii to signed integer
 	cinclean();
-	while((uselect < 1 || uselect > 6) && uselect != 9)//check for invalid input
+	while((uselect < 1 || uselect > 6) && uselect != 9 && uselect != -637)//check for invalid input
 	{	
 		printf("Input value is invalid, please try agian.\n\n");
 		uselect = getmenu();	//reaqcuire input
 	}
 	switch(uselect)			//selection
-	{
+	{//considering changing all breaks to returns, this will allow recursive calls without the multirun bug (*lazy fix*, may come up with something more complex and cleaner at a later time)
 		case 1:		//Creation
 			gmapcreate(&gtransmute,&stransmute,&ztransmute);
 			break;
 		case 2:		//Load/Edit
 			loadmap();
+			originprint();
+			cinclean();
+			return 0;//placeholder used during construction of loadmap to prevent issues
 			break;
 		case 3:		//Download
 			undercon();
@@ -767,7 +955,7 @@ void originprint()
 	printf("g_nextnode is: %p\ng_prevnode is: %p\nsysorigin array dump is:\n",galorigin->g_nextnode,galorigin->g_prevnode);
 	// this prevents the final node(blank from appearing, a do while would cause it to appear
 	do {
-	printf("\nsysorigin's Scompress is: %d\n",sysorigin->scompress);
+	printf("\nsysorigin's Scompress is: %d\nSysnode descrip is: %s\n",sysorigin->scompress,sysorigin->s_descrip);
 	printf("s_nextnode is: %p\ns_prevnode is: %p\nsysorigin address is %p\n",sysorigin->s_nextnode,sysorigin->s_prevnode,sysorigin);
 	for(int i = 0;i< 6;i++)//begin printing element in current nodes array
 	{
@@ -785,7 +973,7 @@ void originprint()
 	}while(1);//these are seperated becaus ethe final node has a null pointer and is not run within this loop
 	printf("zorigin array dump is:\n");
 	do{//begin printing zone nodes
-	printf("\nzcompress is: %d\tz_nextnode is: %p\nz_prevnode is: %p\n",zorigin->zcompress,zorigin->z_nextnode,zorigin->z_prevnode);
+	printf("\nzcompress is: %d\tzdescrip is:\t%s\nz_nextnode is: %p\nz_prevnode is: %p\n",zorigin->zcompress,zorigin->z_descrip,zorigin->z_nextnode,zorigin->z_prevnode);
 	if(zorigin->z_nextnode == NULL)
 	{break;}
 	zorigin = zorigin->z_nextnode;
@@ -802,7 +990,7 @@ int fetchint()
 		if(charinput == '-' && index == 0)//identify negative in first position
 		{signbool == 1;continue;}
 		if(charinput < 48 || charinput > 57)//skip non numeric input
-		{continue;}
+		{charinput = getchar();continue;}
 		uinput += (charinput - 48);//add input
 		index++;//inc lcv
 		if(index != 10)//shift values in uinput to add next value
@@ -863,7 +1051,7 @@ char * stringcombine(char * s_sourceone,char * s_sourcetwo)
 			{
 				target[index] = s_sourcetwo[i];
 				if(s_sourcetwo[i] == '\0')
-				{i += stringlength;}
+				{target[index] = 0;i += stringlength;}
 				index++;
 			}
 			index += stringlength;
@@ -876,8 +1064,18 @@ char * stringcombine(char * s_sourceone,char * s_sourcetwo)
 /*
 Housecleaning todo:
 -comment the stringcombine/copy functions
+-savemap() needs a file open error check
 
+Index is:       90
+ZOPEN->COMP IS: 151586053
 
+i:      0       descrip80
+
+i:      1       descrip-16
+
+i:      2       descrip-70
+
+i:      3       descrip-99
 
 note too self: passing a pointer too a function does not work like a pass by reference
 
