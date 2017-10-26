@@ -1,9 +1,9 @@
 # Tabletop-space-RPG-map-manager
 Simple prompt based map manager built primarily for games like StarFinder
 
-//-------|  CURRENT STATUS:
+//-------|  CURRENT STATUS: on hold while dealing with classes for a few weeks
 
-//-------|  Basic:     Incomplete, but alot of progress has been made(last major update: 10/14/2017 ~11:30PM)
+//-------|  Basic:     complete(V1, still needs work but it is usable)(last major update: 10/25/2017 ~8:15PM)
 
 //-------|  Networked: Incomplete
 
