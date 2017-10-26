@@ -5,7 +5,7 @@
 working on the creation and population of nodes within the linked lists that are to be how the map is navigated and manipulated
 current to do list:
 
--begin and finish a user edit function
+--clean up the program, and fix various minor issues that can occur
 
 //-----/
 
@@ -27,3 +27,5 @@ current to do list:
 -begin and finish functions to save the map to a file(currently may need minor polish)
 
 -begin and finish the functions to load the map from a file
+
+-begin and finish a user edit function
