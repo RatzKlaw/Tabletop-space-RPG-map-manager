@@ -5,7 +5,6 @@
 #include <windows.h>
 #include <time.h>
 #include <stdint.h>//for int_16/32
-//#include <dirent.h>
 
 //---------------|| Map datatypes			 	||----------
 
@@ -57,6 +56,7 @@ struct zonecontent					//pulled because of memory limitations
 struct galmap * galorigin;
 struct sysmap * sysorigin;
 struct zonemap * zorigin;
+int ICANTFIGUREOUTWHYTHISWONTWORK = 0;// flag and work around for something that seems irreperably broken
 
 //---------------|| Non-Main function map below ||--------------
 
@@ -79,23 +79,36 @@ void snodecre(int16_t);	//node creation: system map
 void znodecre(int32_t);	//node creation: zone map
 
 //The node Deletion functions 0: good/node deleted 1:node not found
-int sysnodedel(int16_t);
-int znodedel(int32_t);
+int sysnodedel(int16_t);//delete node with tag that matches argument
+int znodedel(int32_t);//delete node with tag that matches argument
+void nodewipeall();//clear all but the final nodes in each list
 
 //coordinate hash functions
-int16_t coordcompress16(int,int);
-int32_t coordcompress32(int,int,int,int);
+int16_t coordcompress16(int,int);//compress two 8 bit numbers into one 16 bit number
+int32_t coordcompress32(int16_t,int16_t);//compress two 16 bit numbers into one 32 bit number
 
 //Load and save functions
-void loadmap();
-void savemap();
+void loadmap();//load the contents of a map file into its' corresponding lists
+void savemap();//save the contents of each list into a file
 int ffetchint(FILE **);//file fetchint, fed a pointerpointer, this exists because sys and zone maps in load both use integers as compressed coordinates 
 char * ffetchstring(FILE **);//file fetch string, exists for same reason as ffetchint
+
+//---------------||view and edit function prototypes	||----------------
+
+void postload();//this function will occur after loading a file, and will give the user the choice of just viewing the map (read), or editing the map (read/write)
+
+int uniview(int32_t, char);//(Universal View)this will accept one of the compressed tags, -1 in the case of galaxy. it will decompress the tag after identifying which type of map it belongs to, then print the map and color the entities of the map
+
+void editmenu(int32_t, char);// this is where editing will be handled, asking for input and manipulating the data
+void viewmenu(int32_t, char);//functions like edit menu, but will be a read function, rather than read write
+
+void decomp16(int16_t, int*, int*);// decompression functions for any of the view or edits that need it
+void decomp32(int32_t, int16_t*, int16_t*);//decompress a 32 bit integer into two 16 bit integers
 
 //---------------|| Trash collection and debug functions 	||------------
 void cinclean();//clear cin buffer
 void undercon();//under construction message
-void originprint();
+void originprint();//print all contents of the lists
 
 //
 //PROGRAM START
@@ -111,7 +124,7 @@ int main()
 //---------------|| 							 							||--------------------------------------
 
 void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **zinitial)// this function will build the beginning of all linked lists involved in map management, AND will set the origin pointers
-{
+{//set up a sys map with -1 as its tag, and a zone with -2 this will allow blank maps to load easily with an initial node
 	*ginitial = (galmap_dt *) malloc(sizeof(galmap_dt));	//allocate memory and assign pointer
 	(*ginitial)->g_nextnode = NULL;	//set previous nodes address
 	(*ginitial)->g_prevnode = NULL;	//set next nodes address
@@ -141,9 +154,12 @@ void blankmap(galmap_dt **ginitial, struct sysmap **sinitial, struct zonemap **z
 	(*zinitial)->z_nextnode = NULL;	//set previous nodes address
 	(*zinitial)->z_prevnode = NULL;	//set next nodes address
 	(*zinitial)->z_descrip[0] = 'P';(*zinitial)->z_descrip[1] = 'H';
+	(*sinitial)->scompress = -132;
+	(*zinitial)->zcompress = -132;
 	galorigin = (*ginitial);//establishing list start to the redundancy pointers
 	sysorigin = (*sinitial);
 	zorigin = (*zinitial);
+	return;
 }
 
 void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, int reused)// Randmap will need to be canibalized to create a function to be run to generate lists on command.
@@ -155,7 +171,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 	int randinhib = 50;//shortened rand inhibitor, it is made to act as a dynamic gate for the creation of galmap level systems, each time a system is created randinhib will increase, decreasing the chances of antoher system generating
 	int areabias = 0;// a bias to modify what object is selected for placement at the system level: (P)lanet, (S)tar, (H)arbor, (A)nomoly, (F)leet/Flotilla, (D)ebris, (O)ther (may not be used for random), (B)attle, (N)atural fuel, b(E)acon
 	int x_initial = 2, y_initial = 2, randkey = time(NULL);// randkey is a variable for the random output, at the start fo the function it will be used to store the seed for random which will be applied later
-	printf("Would you like to use a random seed or your own seed for the random generator? (Y/N)\n");
+	printf("Would you like to use your own seed for the random generator? (Y/N)\nSelecting no will cause a randomly generated seed to be provided...\n");
 	keyselect = getchar();
 	cinclean();
 	switch(keyselect)
@@ -174,7 +190,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 			randmap(*&ginitial, *&sinitial, *&zinitial, 1);
 			break;
 	}	
-	if(keyselect == 1)
+	if(keyselect == 1)//get user seed
 	{
 		printf("\nPlease input a number within the range of +/-32,767\n");
 		randkey = fetchint();
@@ -305,7 +321,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 						{
 							if((*sinitial)->sysmapc[y][z] != 0)//this gives a node a id number, then creates and increments to the next
 							{
-								(*zinitial)->zcompress = coordcompress32(w,x,y,z);
+								(*zinitial)->zcompress = coordcompress32(coordcompress16(w,x),coordcompress16(y,z));
 								znodecre(-132);
 								(*zinitial) = (*zinitial)->z_nextnode;
 							}
@@ -328,6 +344,7 @@ void randmap(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial, 
 	{
 		(*sinitial) = (*sinitial)->s_prevnode;
 	}
+	return;
 }
 
 void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitial)
@@ -346,9 +363,14 @@ void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitia
 	{
 		case 1:		//Creation(Random)
 			randmap(*&ginitial, *&sinitial, *&zinitial, 0);
+			savemap();
+			postload();
 			break;
 		case 2:		//Creation(Blank)
 			blankmap(*&ginitial, *&sinitial, *&zinitial);
+			printf("Press enter to proceed to edit the map...\n");
+			cinclean();
+			postload();
 			break;
 		case 3:		//Return
 			getmenu();
@@ -356,7 +378,8 @@ void gmapcreate(galmap_dt **ginitial, sysmap_dt **sinitial, zonemap_dt **zinitia
 		default:
 			printf("\nUnknown input Error...\n");
 	}
-	savemap();
+	//nodewipeall();
+	return;
 }
 
 void snodecre(int16_t compressedcoord)//don't forget agian that the first node not having null next and prev pointers will cause a segmentation fault
@@ -406,32 +429,35 @@ void znodecre(int32_t compresscoord)
 	newznode->z_prevnode = tracker;
 }
 
-int sysnodedel(int16_t findme)
+int sysnodedel(int16_t findme)//the program returns 0, 1, or 3, three being the final node is wiped, not deleted, 1 is node found and delete, 0 is node not found
 {
 	sysmap_dt * deleteme = sysorigin;
 	sysmap_dt * nextme;
 	sysmap_dt * prevme;
-	int found = 0;
+	int retval = 0;
 	while(deleteme->scompress != findme && deleteme->s_nextnode != NULL)// finding target node within list
 	{
 		deleteme = deleteme->s_nextnode;//increment the delete, and sourounding nodes location in the list
 		nextme = deleteme->s_nextnode;
 		prevme = deleteme->s_prevnode;
-		found = 1;//setting return value to ok
 	}
-	if(found == 0)//if not found
-	{return 1;}
-	if(nextme == NULL && prevme != NULL)//turning trailer+1 node into trailer node
+	if(deleteme->scompress != findme)//if not found
+	{return 0;}
+	if(deleteme->s_nextnode == NULL && deleteme->s_prevnode != NULL)//turning trailer+1 node into trailer node
 	{
 		prevme->s_nextnode = NULL;
+		retval = 1;
 	}
-	if(prevme == NULL && nextme != NULL)//header+1 becoming header node
+	if(deleteme->s_prevnode == NULL && deleteme->s_nextnode != NULL)//header+1 becoming header node
 	{
+		nextme = deleteme->s_nextnode;//set next node to prevent errors, this is needed because nextnode is first set in the find loop, which won't run if the first node is the target
 		nextme->s_prevnode = NULL;
+		sysorigin = sysorigin->s_nextnode;
+		retval = 1;
 	}
 	if(deleteme->s_nextnode == NULL && deleteme->s_prevnode == NULL)//deleting this will delete sys origin, don't delete, set to zero return value is 3, incase something requires feedback on what happened in teh delete
 	{
-		sysorigin->scompress = -1; //-1 in the compressed value will be used to determine that the node is clean
+		sysorigin->scompress = -132; //-1 in the compressed value will be used to determine that the node is clean
 		for(int i = 0; i < 6;i++)//begin wiping node data
 			{for(int j = 0; j < 6; j++)
 				{sysorigin->sysmapc[i][j] = 0;}}
@@ -439,54 +465,61 @@ int sysnodedel(int16_t findme)
 			{sysorigin->s_descrip[i] = 0;}
 		sysorigin->s_nextnode = NULL;		
 		sysorigin->s_prevnode = NULL;//finish wiping data
-		return 3;//return 3 incase something later on needs to know if the first variable in the list has been cleared
+		retval = 3;//return 3 incase something later on needs to know if the first variable in the list has been cleared
 	}
 	if(deleteme->s_nextnode != NULL && deleteme->s_prevnode != NULL)//linking adjacent nodes
 	{
 		nextme->s_prevnode = prevme;//link surrounding nodes together rather than to node to delete
 		prevme->s_nextnode = nextme;
+		retval = 1;
 	}
 	free(deleteme);//deleting node
+	return retval;
 }
 
 int znodedel(int32_t findme)
-{
+{//for comments on how this function works, see sysnodedel, the two are identical aside from variable name changes to account for the two different datatypes
 	zonemap_dt * deleteme = zorigin;
 	zonemap_dt * nextme;
 	zonemap_dt * prevme;
-	int found = 0;
+	int retval = 0;
 	while(deleteme->zcompress != findme && deleteme->z_nextnode != NULL)// finding target node within list
 	{
 		deleteme = deleteme->z_nextnode;//increment delete and surrounding nodes position
 		nextme = deleteme->z_nextnode;
 		prevme = deleteme->z_prevnode;
-		found = 1;
 	}
-	if(found == 0)
-	{return 1;}
-	if(nextme == NULL && prevme != NULL)//turning trailer+1 node into trailer node
+	if(deleteme->zcompress != findme)
+	{return 0;}
+	if(deleteme->z_nextnode == NULL && deleteme->z_prevnode != NULL)//turning trailer+1 node into trailer node
 	{
 		prevme->z_nextnode = NULL;
+		retval = 1;
 	}
-	if(prevme == NULL && nextme != NULL)//header+1 becoming header node
+	if(deleteme->z_prevnode == NULL && deleteme->z_nextnode != NULL)//header+1 becoming header node
 	{
+		nextme = deleteme->z_nextnode;
 		nextme->z_prevnode = NULL;
+		zorigin = zorigin->z_nextnode;
+		retval = 1;
 	}
-	if(deleteme->z_nextnode == NULL && deleteme->z_prevnode == NULL)//deleting this will delete sys origin, don't delete, set to zero return value is 3, incase something requires feedback on what happened in teh delete
+	if(deleteme->z_nextnode == NULL && deleteme->z_prevnode == NULL)//deleting this will delete zone origin, don't delete, set to zero return value is 3, incase something requires feedback on what happened in teh delete
 	{
-		zorigin->zcompress = -1; //-1 in the compressed value will be used to determine that the node is clean
+		zorigin->zcompress = -132; //-1 in the compressed value will be used to determine that the node is clean
 		for(int i = 0; i < 255; i++)//begin wiping data
 			{zorigin->z_descrip[i] = 0;}
 		zorigin->z_nextnode = NULL;		
 		zorigin->z_prevnode = NULL;//finish wiping data
-		return 3;//return three incase soemthing needs to know the first node was wiped
+		retval = 3;//return three incase soemthing needs to know the first node was wiped
 	}
 	if(deleteme->z_nextnode != NULL && deleteme->z_prevnode != NULL)//linking adjacent nodes
 	{
 		nextme->z_prevnode = prevme;//linking surounding nodes to exclude delete node
 		prevme->z_nextnode = nextme;
+		retval = 1;
 	}
 	free(deleteme);//deleting node
+	return retval;
 }
 
 int16_t coordcompress16(int x, int y) // a single function that compresses two variables into a single variable while retaining data integrity
@@ -498,16 +531,22 @@ int16_t coordcompress16(int x, int y) // a single function that compresses two v
 	return returnvalue;
 }
 
-int32_t coordcompress32(int w, int x, int y, int z) // functions like the 16 bit versionbut is for a 32b lossless compress, w,x are the x,y coordinates in the system map, y,z are the coordinates for the zone
+int32_t coordcompress32(int16_t w, int16_t x) // functions like the 16 bit versionbut is for a 32b lossless compress, w is the x,y coordinates in the system map, x is the coordinates for the zone
 {
 	int32_t returnvalue = 0;// spawn value of zero to return
-	returnvalue += coordcompress16(w,x);//calls the 16bit version(w is x1, x is y1(the global array coordinates))
+	returnvalue += w;//calls the 16bit version(w is x1, x is y1(the global array coordinates))
 	returnvalue = returnvalue << 16;//shift to preserve data
-	returnvalue += coordcompress16(y,z);//(y is x2, and z is y2(local array coordinates))
+	returnvalue += x;//(y is x2, and z is y2(local array coordinates))
 	return returnvalue;
 }
 
-
+void nodewipeall()
+{
+	while(sysnodedel(sysorigin->scompress) != 3)//use the delete function as an argument for while, once it returns 3, it wiped the final node
+	{}
+	while(znodedel(zorigin->zcompress) != 3)//use the delete function as an argument for while, once it returns 3, it wiped the final node
+	{}
+}
 
 
 //---------------|| 							 							||--------------------------------------
@@ -515,51 +554,55 @@ int32_t coordcompress32(int w, int x, int y, int z) // functions like the 16 bit
 //---------------|| 							 							||--------------------------------------
 
 void loadmap() //loads a map form a user selected file. should only be called by main menu
-{
+{//also needs to handle blank files, if galaxy is blank, cut off function after galaxy load, deletes may be a problem
 	system("CLS");
 	FILE * opentgt;
-	char * file_name,fcintake[1], *stringbuffer;
-	_Bool findreturn = 0, LCV = 1;
+	char * file_name, *stringbuffer;//creating data that's needed
+	_Bool LCV = 1;
 	WIN32_FIND_DATA findme_data;
 	HANDLE FindMeH = INVALID_HANDLE_VALUE;
 	int index = 1,uinput = 0,fintake = 0;
 	galmap_dt * g_open = (galmap_dt *) malloc(sizeof(galmap_dt));//node should be built before being loaded
 	sysmap_dt * s_open = (sysmap_dt *) malloc(sizeof(sysmap_dt));//currently the pointers are null unless load is called by somehting other than map
 	zonemap_dt * z_open = (zonemap_dt *) malloc(sizeof(zonemap_dt));//they may be something else, if so, they need to be wiped
-	s_open->s_nextnode = NULL;s_open->s_prevnode = NULL;
+	g_open->g_nextnode = NULL;g_open->g_prevnode = NULL;
+	s_open->s_nextnode = NULL;s_open->s_prevnode = NULL;//set pointers so program doesn't try to access memory that doesn't belong to it
 	z_open->z_nextnode = NULL;z_open->z_prevnode = NULL;
-	for(int i = 0; i < 255;i++)
+	for(int i = 0; i < 255;i++)//zero description of empty nodes
 	{s_open->s_descrip[i] = 0;z_open->z_descrip[i] = 0;}
 	galorigin = g_open;sysorigin = s_open; zorigin = z_open;//the create functions are dependent on the origin pointers for parsing the lists	
 	printf("Load selected...\nBeginning search for map files...\n");
-	file_name = stringcopy("KochabMapSave\\*.KMFX");
+	file_name = stringcopy("KochabMapSave\\*.KMFX");//set up string (extension with wildcard) to feed to FFF function
 	FindMeH = FindFirstFile(file_name, &findme_data);
-	if(FindMeH == INVALID_HANDLE_VALUE)
+	if(FindMeH == INVALID_HANDLE_VALUE)// check if first file was found
 	{
 		printf("Critical error: File/Directory not found or some other error occured...\nPress enter to return to the main menu...\n");
 		cinclean();
 		FindClose(FindMeH);
 		return;
 	}
-	while(LCV == 1)
+	while(LCV == 1)//parse, and print files in directory with .KMFX extension
 	{
 		file_name = stringcopy((findme_data.cFileName));//using data directly from the find data caused wierd, output, this is probably something i was doing wrong, implemented this work around to fix it
 		printf("Map %d's name is:\t%s\n",index,(file_name));
 		LCV = FindNextFileA(FindMeH, &findme_data);
 		index++;
 	}	
-	FindClose(FindMeH);
-	LCV = 1;
+	FindClose(FindMeH);//close file search
+	LCV = 1;//reset lcv for do while
 	printf("%d: Exit to menu\nPlease enter the corresponding value to make a selection...\n",index);
-	do{
+	do{//begin accepting input for file selection and finding file in directory
 		uinput = fetchint();
+		if(uinput == index)
+		{
+			return;
+		}
 		if(uinput < 0 || uinput > index)
 		{printf("Invalid selection, please try agian...\n");}
 	}while(uinput < 0 || uinput > index);//check for invalid input
-	//from here, use index and uinput to parse through the directory, pull the name of the file, and place it into a string for fstream to use to open the file
 	file_name = stringcopy("KochabMapSave\\*.KMFX");
-	FindMeH = FindFirstFile(file_name, &findme_data);
-	if(FindMeH == INVALID_HANDLE_VALUE)
+	FindMeH = FindFirstFile(file_name, &findme_data);//from this point the function will begin looking for the user input, and pull the file name once it finds the file with the corresponding index
+	if(FindMeH == INVALID_HANDLE_VALUE)//exception handling for file not found or some other error
 	{
 		printf("Critical error: File/Directory not found or some other error occured...\nPress enter to return to the main menu...\n");
 		cinclean();
@@ -567,10 +610,10 @@ void loadmap() //loads a map form a user selected file. should only be called by
 		return;
 	}
 	index = 1;
-	while(uinput != index && LCV == 1)
+	while(uinput != index && LCV == 1)//find file data from directory
 	{
-		index++;
-		LCV = FindNextFileA(FindMeH, &findme_data);
+		index++;//this loop is an issue, a file can be added to or deleted from the directory before this search occurs, and cause the program to load another file
+		LCV = FindNextFileA(FindMeH, &findme_data);//if loop exits from lcv, file was not found
 	}
 	if(LCV == 0 && uinput != index)//if FNF encountered an error and killed search execution early, run this
 	{
@@ -578,31 +621,31 @@ void loadmap() //loads a map form a user selected file. should only be called by
 		cinclean();
 		FindClose(FindMeH);
 		return;	
-	}
-	//thinking it would be a nice touch of feedback to print file name that is being opened, add this at some point
-	file_name = stringcombine("KochabMapSave\\",(findme_data.cFileName));
+	}														//end of name search
+	file_name = stringcombine("KochabMapSave\\",(findme_data.cFileName));//compress neame strings and open file
+	printf("\nOpening file:\n%s\n",file_name);
 	opentgt = fopen(file_name,"r");
-	do
+	do//this extracts data from the file and dumps it into corresponding lists
 	{
 		for(int i = 0; i < 2; i++)
 		{
-			fintake = fgetc(opentgt);
+			fintake = fgetc(opentgt);//this grabs the '<' and identifying character from the identifying line
 			
 		}
 		index = fintake;//get data tag
 		fintake = fgetc(opentgt);fintake = fgetc(opentgt);//grab '>' and newline
-		if(index == (-1))
+		if(index == (-1))//i don't remember what this is...i think it was to be used as an end of file indicator.
 		{
 			break;
 		}
 		switch(index)
 		{
-			case 84://<T>
+			case 84://<T>(title)
 				do{//title currently is considered useless, this function discards it
 					fintake = fgetc(opentgt);
 				}while(fintake != '\n');
 				break;
-			case 71://<G>: a second node should not be required for gmap
+			case 71://<G>(galaxy): a second node should not be required for gmap
 				for(int i = 0; i < 10; i ++)
 				{
 					for(int j = 0; j < 10; j++)
@@ -612,54 +655,54 @@ void loadmap() //loads a map form a user selected file. should only be called by
 					fintake = fgetc(opentgt);//wipe newline character at end of row in save file
 				}
 				break;
-			case 83://<S>
-				s_open->scompress = ffetchint(&opentgt);
+			case 83://<S>(system)
+				s_open->scompress = ffetchint(&opentgt);//grabbing id tag
 				stringbuffer = ffetchstring(&opentgt);
 				for(int i = 0; i < 255; i++)
 				{
 					
-					s_open->s_descrip[i] = stringbuffer[i];
+					s_open->s_descrip[i] = stringbuffer[i];//transfer description from buffer to node
 					
 				}
 				for(int i = 0; i < 6; i++)
 				{
 					for(int j = 0; j < 6; j++)
 					{
-						s_open->sysmapc[i][j] = fgetc(opentgt);
+						s_open->sysmapc[i][j] = fgetc(opentgt);//populate map
 					}
 				}
-				fintake = fgetc(opentgt);
-				snodecre((int16_t) -132);//type cast for consistancy, and to make sure no issues occur
+				fintake = fgetc(opentgt);//pull newline at end of map data
+				snodecre((int16_t) -132);//type cast for consistancy, and to make sure no issues occur. -132 is used because a node was created prior in the function
 				s_open = s_open->s_nextnode;
 				break;
-			case 90://<Z>
-				z_open->zcompress = ffetchint(&opentgt);
+			case 90://<Z>(zone)
+				z_open->zcompress = ffetchint(&opentgt);//grab id
 				stringbuffer = ffetchstring(&opentgt);
 				for(int i = 0; i < 255; i++)
 				{
-					z_open->z_descrip[i] = stringbuffer[i];
+					z_open->z_descrip[i] = stringbuffer[i];//populate description
 				}
-				znodecre((int16_t) -132);
+				znodecre((int16_t) -132);//create new node
 				z_open = z_open->z_nextnode;
 				break;
-			default:
+			default: //error occured
 				printf("\nCritical read error: An error occured while reading from map file (node creation)...\npress enter to begin exit process...");
 				cinclean();
 				uexit();
 				break;
 		}
 	}while(1);//EOF is -1
-	sysnodedel((int16_t) -132);
+	sysnodedel((int16_t) -132);//delete unused trailing nodes
 	znodedel((int32_t) -132);
-	FindClose(FindMeH);
-	fclose(opentgt);
-	printf("Search closed\n");
+	FindClose(FindMeH);//close file search
+	fclose(opentgt);//close file
+	printf("Search closed\nPress enter to continue\n");//feedback, and pause
 	cinclean();
-	return;
+	postload();
 }
 
 void savemap()//add user input for a file name
-{
+{//needs to handle blank files, if galaxy is blank, find a way to cut off the function
 	FILE * savetgt, * findme;//findme is a pointe rused to detemrine if a file already exists with the input name
 	char *D_name,ustring[3],file_name[256], * name_pointer;//max directory size of 260+1(nullbyte) filename will act as map name, to be saved first under the 'T' identifier (the other identifiers will be explained in the write portion of the function
 	int errorchk = 0;
@@ -725,29 +768,30 @@ void savemap()//add user input for a file name
 			break;
 	};*/
 	do{
-		D_name = stringcopy("KochabMapSave\\\0");
+		D_name = stringcopy("KochabMapSave\\\0");//this and the below lines grabs file name from user input, minus characters blocked by windows(if i convert this to linux, i need to remember this line)
 		name_pointer = stringcopy("\0");
 		system("CLS");
 		printf("Preparing to save map, a name is required...\nThe name must be less than 251 characters in length. If your map name exceeds this amount, it will be truncated.\nAs well as not including '\"', '*', '/', ':', '<', '>', '?', '\\', or '|' .\nAny of these used as input will be excluded.\n");
 		int index = 0,nullfound = 0;
-		while(nullfound == 0 && index < 251)
+		while(nullfound == 0 && index < 254)
 		{
 			file_name[index] = getchar();
 			if(file_name[index] == 34 || file_name[index] == 42 || file_name[index] == 47 || file_name[index] == 58 || file_name[index] == 60 || file_name[index] == 62 || file_name[index] == 63 || file_name[index] == 92 || file_name[index] == 124)
 			{
-				continue;
+				continue;//skip blocked characters
 			}
-			if(file_name[index] == '\0' || file_name[index] == '\n')
+			if(file_name[index] == '\0' || file_name[index] == '\n')//kill input grabbing
 			{
 				nullfound = 1;//sets lcv to exit loop
 				file_name[index] = 0;//guarentuees a null terminated string
 			}
 			index++;
 		}
+		file_name[254] = 0;//null terminate
 		name_pointer = stringcombine(file_name,".KMFX\0");//'(K)ochab (M)ap (F)ormat e(X)tension' file extension added, this is done due to some ransomware viruses targeting file extensions. this will hopefully prevent data loss if the computer is infected
 		printf("\nInput file name and extension is: %s\n",name_pointer);
 		D_name = stringcombine(D_name,name_pointer);
-		findme = fopen(D_name, "r");
+		findme = fopen(D_name, "r");//end of grabbing user name
 		if(findme != NULL)//if file found error checking
 		{
 			printf("\nA file exists with this name, would you like to overwrite this file? (Y/N)\n");//if an error is detected,  the directory string is not cleared, and the next input is appended  into the same string
@@ -769,54 +813,60 @@ void savemap()//add user input for a file name
 			}while((ustring[0] != 'n' && ustring[0] != 'y') || errorchk == 1);//check for invalid input
 		}
 	}while(findme != NULL && ustring[0] == 'n');
+	while((sysnodedel((int16_t)-132)) == 1)
+	{/*this is to wipe any extra nodes in memory that shouldn't be, if the list was all -132 nodes, it will stop on the final node (returns 3) so even if the map is blank, nodes will be stored*/}
+	while((znodedel((int32_t)-132)) == 1)
+	{/*this is to wipe any extra nodes in memory that shouldn't be, if the list was all -132 nodes, it will stop on the final node (returns 3) so even if the map is blank, nodes will be stored*/}
 	printf("\nSaving to the directory: <Current Working Directory>\\%s\n",D_name);
 	savetgt = fopen(D_name, "w");//this function lacks the ability to create the folder in the public documents if it doesn't exist find another way
 	fprintf(savetgt,"<T>\n%s\n",file_name);
-	while(1)
+	while(1)//writing galaxy map data
 	{
-		fprintf(savetgt,"<G>\n");
+		fprintf(savetgt,"<G>\n");//save tag
 		for(int i = 0; i < 10; i++)
 		{for(int j = 0; j < 10; j++)
 			{
-				fprintf(savetgt,"%c",g_save->gmapover[i][j]);
+				fprintf(savetgt,"%c",g_save->gmapover[i][j]);//save map
 			}
 			if(i < 9)
 			{
-				fprintf(savetgt,"\n");
+				fprintf(savetgt,"\n");//end galaxy writing
 			}
 		}
-		if(g_save->g_nextnode == NULL)
+		if(g_save->g_nextnode == NULL)//this needs to exist because i was too lazy to remove the list pointers
 		{
 			break;
 		}
 		g_save = g_save->g_nextnode;
 	}
-	while(1)
+	while(1)//writing system map data
 	{
-		fprintf(savetgt,"\n<S>\n%d\n%s\n",(s_save->scompress),(s_save->s_descrip));
+		fprintf(savetgt,"\n<S>\n%d\n%s\n",(s_save->scompress),(s_save->s_descrip));//save file, list tag, and description
 		for(int i = 0; i < 6; i++)
 		{for(int j = 0; j < 6; j++)
 			{
-				fprintf(savetgt,"%c",s_save->sysmapc[i][j]);
+				fprintf(savetgt,"%c",s_save->sysmapc[i][j]);//save map
 			}
 		}
-		if(s_save->s_nextnode == NULL)
+		if(s_save->s_nextnode == NULL)//kills loop at end of list
 		{
 			break;
 		}
 		s_save = s_save->s_nextnode;
 	}
-	while(1)
+	while(1)//writing zone map data
 	{
-		fprintf(savetgt,"\n<Z>\n%d\n%s",(z_save->zcompress),(z_save->z_descrip));
-		if(z_save->z_nextnode == NULL)
+		fprintf(savetgt,"\n<Z>\n%d\n%s",(z_save->zcompress),(z_save->z_descrip));//write file tag, list tag, and description
+		if(z_save->z_nextnode == NULL)//kill save at end of list
 		{
 			break;
 		}
 		z_save = z_save->z_nextnode;
 	}
-	fclose(savetgt);
-	system("pause");
+	fclose(savetgt);// close file
+	system("pause");//i don't believe this is needed as another pause occurs elsewhere
+	//this function should return to the menu, after node wipe
+	return;
 }
 
 char * ffetchstring(FILE ** opentgt)
@@ -828,7 +878,7 @@ char * ffetchstring(FILE ** opentgt)
 	fcintake[0] = fgetc((*opentgt));//fcintake was setup and used because string combine requires a char*
 	while(fcintake[0] != '\n' && fcintake[0] != (-1))
 	{
-		retstring = stringcombine(retstring,fcintake);//trying to access null pointer to get string, is good idea
+		retstring = stringcombine(retstring,fcintake);//trying to access null pointer to get string, is best idea
 		fcintake[0] = fgetc((*opentgt));
 	}
 	return retstring;
@@ -836,10 +886,16 @@ char * ffetchstring(FILE ** opentgt)
 
 int ffetchint(FILE ** opentgt)
 {
-	int uinput = 0;
+	int uinput = 0, isneg = 0;
 	char charinput = fgetc((*opentgt));;//lcv and input storage
 	while(charinput != 0 && charinput != 10)
 	{
+		if(charinput == 45 || charinput == '-')//check if list tag is negative
+		{
+			isneg = 1;
+			charinput = fgetc((*opentgt));
+			continue;
+		}
 		if(charinput < 48 || charinput > 57)//skip non numeric input
 		{charinput = fgetc((*opentgt));continue;}
 		uinput += (charinput - 48);//add input
@@ -848,64 +904,815 @@ int ffetchint(FILE ** opentgt)
 		if(charinput == '\n')//prevents multiplying too many times
 		{uinput = uinput / 10;}
 	}
+	if(isneg == 1)//if input was negative
+	{uinput = uinput*-1;}
 	return uinput;
 }
 
+
+//---------------||															||--------------------------------------
+//---------------||			View and Edit functions are below				||--------------------------------------
+//---------------||															||--------------------------------------
+
+void postload()
+{
+	int uinput = 0;
+	system("CLS");
+	printf("Post loading and creation selection:\nPlease enter a value corresponding with your selection.\n1: View\n2: Edit\n3: Exit to Menu\n");//the exit to menu will need to wipe the nodes
+	do{
+	uinput = fetchint();
+	if(uinput < 1 || uinput > 3)//input error check
+	{
+		printf("\nInvalid input, please try agian...\n");
+	}
+	}while(uinput < 1 || uinput > 3);
+	switch(uinput)
+	{
+		case 1:
+			viewmenu(-1, 'G');
+			break;
+		case 2:
+			editmenu(-1,'G');
+			sysnodedel(-132);//the deletes are here to make it easy to alter if needed
+			znodedel(-132);
+			savemap();
+			break;
+		case 3:
+			nodewipeall();//wiping nodes here so a new map can be made, or loaded
+			break;;
+		default:
+			printf("\nCritical error occured...\nPlease press enter to begin shutdown process...\n");
+			cinclean();
+			uexit();
+			break;
+	}
+	return;
+}
+
+int uniview(int find_me, char type)//(Universal View)this will accept one of the compressed tags, -1 in the case of galaxy. 
+{//the char was required due to atleast one possible collision in a system that is located at 0,0 with a zone located at 0,0
+	sysmap_dt *systgt = sysorigin;//return of -1 means no system found
+	zonemap_dt *zonetgt = zorigin;
+	switch(type)
+	{
+		case 'G'://print galaxy
+			printf("\nLegend: 'S' = System at these coordinates\t' ' = Empty space at these coordinates");
+			printf("\n   1|2|3|4|5|6|7|8|9|10");//setting up x coordinates
+			for(int i = 0; i < 10; i++)
+			{
+				if(i != 9)
+					{printf("\n%d |",(i+1));}//vertical brackets are being used for increased readability
+				else
+					{printf("\n%d|",(i+1));}//print 10 without a space to not ruin formatting
+				for(int j = 0; j < 10; j++)
+				{
+					printf("%c|",galorigin->gmapover[i][j]);//print characterfrom galaxy
+				}
+			}
+			printf("\n");
+			break;
+		case 'S'://print system
+			while((systgt->scompress != find_me) && (systgt->s_nextnode != NULL))//find the node in the list
+			{
+				systgt = systgt->s_nextnode;
+			}
+			if(systgt->scompress != find_me)//couldn't find the list
+			{
+				printf("\nNo system exists at these coordinates...");
+				return -1;
+			}
+			printf("\nLegend: (P)lanet, (S)tar, (H)arbor, (A)nomoly, (F)leet/Flotilla, (D)ebris, (O)ther, (B)attle, (N)atural fuel, b(E)acon");
+			printf("\nSystem: %d\n   1|2|3|4|5|6",find_me);//x coord print
+			for(int i = 0; i < 6; i++)
+			{
+				printf("\n%d |",(i+1));//y coord print
+				for(int j = 0; j < 6; j++)
+				{
+					printf("%c|",systgt->sysmapc[i][j]);//print system value
+				}
+			}
+			printf("\nDescription: %s",systgt->s_descrip);//print description
+			break;
+		case 'Z'://print zone
+			while((zonetgt->zcompress != find_me) && (zonetgt->z_nextnode != NULL))//find node
+			{
+				zonetgt = zonetgt->z_nextnode;
+			}
+			if(zonetgt->zcompress != find_me)//couldn't find list
+			{
+				printf("\nNo zone exists at these coordinates...");
+				return -1;
+			}
+			printf("\nZone: %d\nDescription: %s", zonetgt->zcompress, zonetgt->z_descrip);//print zone id tag, and descrip
+			break;
+		default:
+			printf("An error has occured, the argument of type is:\t%c\nPress enter to begin closing program...\n",type);
+			cinclean();
+			uexit();
+			break;
+	}
+	return 1;
+}
+
+void editmenu(int32_t find_me, char type)// this is where editing will be handled, asking for input and manipulating the data
+{//once this function is complete, a pass needs to be made to make sure any recursive call is follow by return to prevent multiple runs of the final do continue statement.
+	int ux,uy,compress = 0,viewret,dx,dy,dxt = 0,dyt = 0;//user x/y and compressed coordinates. the d variables are used for the decompress functions
+	char stringbuffer[255];
+	galmap_dt *gedittgt = galorigin;
+	sysmap_dt *sedittgt = sysorigin;
+	zonemap_dt *zedittgt = zorigin;
+	system("CLS");
+	while(1)
+	{
+		if(type != 'G')//invalid input at the galaxy level will force the user to run through to zone before being able to return fix this
+		{
+			break;
+		}
+		printf("GALAXY VIEW:");//galaxy output/input
+		uniview(-1,'G');
+		printf("\nPlease make a selection.\n1: View System.\n2: Edit.\n3: Return to main menu.\n");
+		viewret = fetchint();
+		while(viewret < 1 || viewret > 3)
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			viewret = fetchint();
+		}
+		switch(viewret)
+		{
+			case 1://this is gets coordinates and feeds them to this function recursively
+				printf("\nPlease input an X(Column/Horizontal) value\n");
+				ux = fetchint();
+				while(ux < 1 || ux > 10)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					ux = fetchint();
+				}
+				ux--;
+				printf("\nPlease input an Y(Row/Vertical) value\n");
+				uy = fetchint();
+				while(uy < 1 || uy > 10)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					uy = fetchint();
+				}
+				uy--;
+				compress = coordcompress16(uy,ux);//compress input
+				editmenu(compress,'S');//go to system level
+				system("CLS");
+				printf("1: Return to Galaxay\n2: Return to menu\n");//"do you want to continue"
+				do{
+				ux = fetchint();
+				if(ux < 1 || ux > 2)
+				{
+					printf("\nInvalid input, please try agian...\n");
+				}
+				}while(ux < 1 || ux > 2);
+				switch(ux)
+				{
+					case 1:
+						continue;//not sure if it would be cleaner to continue with the loop, or use a recursive call to get back to galaxy
+					case 2:
+						break;
+					default:
+						printf("\nCritical error occured...\nPlease press enter to begin shutdown process...\n");
+						cinclean();
+						uexit();
+						break;
+				}
+				break;
+			case 2://edit coordinates
+				printf("\nPlease input an X(Column/Horizontal) value\n");
+				ux = fetchint();
+				while(ux < 1 || ux > 10)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					ux = fetchint();
+				}
+				ux--;
+				printf("\nPlease input an Y(Row/Vertical) value\n");
+				uy = fetchint();
+				while(uy < 1 || uy > 10)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					uy = fetchint();
+				}
+				uy--;
+				if(gedittgt->gmapover[uy][ux] != 'S')//checking for system at input coordinates
+				{
+					printf("\nNo systems exist at the input coordinates...\nWould you like to generate an empty one? (Y/N)\nSelecting no will return you to the galaxy map.\n");
+					while(1)
+					{
+						viewret = getchar();//this input could probably be done alot better as it will stop after two characters
+						cinclean();
+						if(viewret >= 110)//change case
+						{
+							viewret -= 32;
+						}
+						if(viewret == 78 || viewret == 89)//check for valid input
+						{
+							break;
+						}
+						printf("\nInvalid input, please try agian...\n");
+					}
+					switch(viewret)//processing input
+					{
+						case 89://add system
+							gedittgt->gmapover[uy][ux] = 'S';//set gmap to display the system
+							if(sedittgt->s_nextnode == NULL && sedittgt->s_prevnode == NULL && sedittgt->scompress == -132)//if first node, and unmodified
+							{
+								sedittgt->scompress = coordcompress16(uy,ux);//give node tag, and break before creation of next node, this prevents duplicates and an issue that was occuring during the creation of the function
+								break;
+							}
+							snodecre(coordcompress16(uy,ux));//create new node if not the only node
+							break;
+						case 78:
+							editmenu(-1,'G');//jump up to galmap
+							return;
+						default:
+							printf("\nCritical error: Please press enter to begin shutdown process...\n");
+							cinclean();
+							uexit();
+							break;
+					}
+				}
+				else//if a system exists at the coordinates, delete, or not
+				{
+					printf("\nA system exists at these coordinates, Would you like to delete it and all of the zones related to it? (Y/N)\nSelecting no will return you to the galaxy map.\n");
+					while(1)
+					{
+						viewret = getchar();//same input error agian, i will fix this at a later time
+						cinclean();
+						if(viewret >= 110)//change case
+						{
+							viewret -= 32;
+						}
+						if(viewret == 78 || viewret == 89)//valid input check
+						{
+							break;
+						}
+						printf("\nInvalid input, please try agian...\n");
+					}
+					switch(viewret)//the delete doesn't seem to work properly
+					{
+						case 89://wipe system and all related zone nodes
+							gedittgt->gmapover[uy][ux] = 0;
+							sysnodedel(coordcompress16(uy,ux));
+							do{
+								compress = zedittgt->zcompress;//grab id tag to be decompressed
+								decomp32(zedittgt->zcompress,(int16_t *)&dy,(int16_t *)&dx);//this part works by decompressing the tag down to the 16 most significant bits where the x/y coordinates of the system are stored
+								decomp16(dy,&dy,&dx);//final decompress. only the 16 most significant needs to be compared and the 16 least are the zone coordinates in the system
+								if((uy == dy) && (ux == dx))//check if zone system level coordinates are the same as user input
+								{
+									znodedel(compress);//wipe all nodes in relation to the target system
+								}
+								if(zedittgt->z_nextnode == NULL)//if end of node list, break loop
+								{
+									break;
+								}
+								if(zedittgt->z_nextnode != NULL)//increment list if not the end
+								{
+									zedittgt = zedittgt->z_nextnode;
+								}
+							}while(1);
+							break;
+						case 78:
+							editmenu(-1,'G');//recursively call itself to return to the galaxy map
+							return;
+						default:
+							printf("\nCritical error: Please press enter to begin shutdown process...\n");
+							cinclean();
+							uexit();
+							break;
+					}
+				}
+				break;
+			case 3:
+				nodewipeall();
+				return;
+			default:
+				break;
+		}
+		printf("\nContinue? (Y/N)\nSelecting no will return you to the main menu.\n");
+		while(1)
+		{
+			viewret = getchar();
+			cinclean();
+			if(viewret >= 110)//chang case of input
+			{
+				viewret -= 32;
+			}
+			if(viewret == 78 || viewret == 89)
+			{
+				break;
+			}
+			printf("\nInvalid input, please try agian...\n");
+		}
+		switch(viewret)
+		{
+			case 89:
+				editmenu(-1,'G');//recursive call to return to galaxy
+			case 78:
+				return;
+			default:
+				printf("\nCritical error: Please press enter to begin shutdown process...\n");
+				cinclean();
+				uexit();
+				break;
+		}
+		break;
+	}
+	while(1)
+	{
+		if(type != 'S')//this uses type as a way to prevent collissions as they can occur like a system and zone both at an index of 0,0/0,0
+		{
+			break;
+		}
+		printf("SYSTEM VIEW:");
+		viewret = uniview(find_me,'S');
+		if(viewret == -1)
+		{
+			printf("\nPress enter to return to galaxy...\n");
+			cinclean();
+			return;
+		}
+		while((sedittgt->scompress) != find_me)//parse system list for target node
+		{
+			sedittgt = sedittgt->s_nextnode;
+		}
+		printf("\nPlease make a selection.\n1: View Zone.\n2: Edit.\n3: Return to main menu.\n");
+		viewret = fetchint();
+		while(viewret < 1 || viewret > 3)//input error check
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			viewret = fetchint();
+		}
+		switch(viewret)
+		{
+			case 1://find input for view
+				printf("\nPlease input an X(Column/Horizontal) value\n");
+				ux = fetchint();
+				while(ux < 1 || ux > 6)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					ux = fetchint();
+				}
+				ux--;
+				printf("\nPlease input an Y(Row/Vertical) value\n");
+				uy = fetchint();
+				while(uy < 1 || uy > 6)
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					uy = fetchint();
+				}
+				uy--;
+				compress = coordcompress32(find_me,coordcompress16(uy,ux));
+				editmenu(compress,'Z');//recursive call to get to zone function
+				printf("1: Return to System\n2: Return to Galaxy\n");
+				do{
+				ux = fetchint();
+				if(ux < 1 || ux > 2)
+				{
+					printf("\nInvalid input, please try agian...\n");
+				}
+				}while(ux < 1 || ux > 2);
+				switch(ux)
+				{
+					case 1:
+						editmenu(find_me,'S');//return to system through recursive call
+					case 2:
+						return;//return to galaxy
+					default:
+						printf("\nCritical error occured...\nPlease press enter to begin shutdown process...\n");
+						cinclean();
+						uexit();
+						break;
+				}
+				return;
+			case 2://edit case
+				printf("\nPlease make a selection.\n1: Edit zone.\n2: Edit system description.\n");
+				viewret = fetchint();
+				while(viewret < 1 || viewret > 2)//input check
+				{
+					printf("\nInvalid input... Please try agian.\n");
+					viewret = fetchint();
+				}
+				switch(viewret)
+				{
+					case 1://zone edit
+						printf("\nPlease input an X(Column/Horizontal) value\n");
+						ux = fetchint();
+						while(ux < 1 || ux > 6)
+						{
+							printf("\nInvalid input... Please try agian.\n");
+							ux = fetchint();
+						}
+						ux--;
+						printf("\nPlease input an Y(Row/Vertical) value\n");
+						uy = fetchint();
+						while(uy < 1 || uy > 6)
+						{
+							printf("\nInvalid input... Please try agian.\n");
+							uy = fetchint();
+						}
+						uy--;
+						if(sedittgt->sysmapc[uy][ux] == 0 || sedittgt->sysmapc[uy][ux] == 10)//if a zone exists, run this
+						{
+							printf("\nNo zones exist at the input coordinates...\nWould you like to generate a new one? (Y/N)\nSelecting no will return you to the system.\n");
+							while(1)
+							{
+								viewret = getchar();
+								cinclean();
+								if(viewret >= 110)//case change
+								{
+									viewret -= 32;
+								}
+								if(viewret == 78 || viewret == 89)//check for valid input
+								{
+									break;
+								}
+								printf("\nInvalid input, please try agian...\n");
+							}
+							switch(viewret)
+							{
+								case 89://this has no input checking, fix this
+									printf("\nPlease select an identifying symbol from the pool:\n(P)lanet, (S)tar, (H)arbor, (A)nomoly, (F)leet/Flotilla, (D)ebris, (O)ther, (B)attle, (N)atural fuel, b(E)acon\n");
+									do{//input check
+										viewret = getchar();
+										cinclean();
+										if(viewret > 96)//case change
+										{
+											viewret -= 32;
+										}
+										if(viewret == 65 || viewret == 66 || viewret == 68 || viewret == 69 || viewret == 70 || viewret == 72 || viewret == 78 || viewret == 79 || viewret == 80 || viewret == 83)//break out of input check
+										{
+											break;
+										}
+										printf("\nInvalid input, please try agian...\n");
+									}while(1);
+									if(viewret == 65 || viewret == 66 || viewret == 68 || viewret == 69 || viewret == 70 || viewret == 72 || viewret == 78 || viewret == 79 || viewret == 80 || viewret == 83)
+									{
+										sedittgt->sysmapc[uy][ux] = viewret;
+										if(zedittgt->z_nextnode == NULL && zedittgt->z_prevnode == NULL && zedittgt->zcompress == -132)//if zone node is the only node, and unmodified, this will run
+										{
+											zedittgt->zcompress = coordcompress32(find_me,coordcompress16(uy,ux));//set only node
+											break;
+										}
+										znodecre(coordcompress32(find_me,coordcompress16(uy,ux)));
+										znodecre(-132);//this seems redundant, save wipes out spare -132 nodes
+									}
+									break;
+								case 78:
+									editmenu(find_me,'S');//recursive call to get back to system
+									return;
+								default:
+									printf("\nCritical error: Please press enter to begin shutdown process...\n");
+									cinclean();
+									uexit();
+									break;
+							}
+						}
+						else//edit a zone that already exists
+						{
+							printf("\nA Zone exists at these coordinates:\n1: Edit\n2: Delete\n3: return to system.\n");
+							viewret = fetchint();
+							if(viewret < 1 || viewret > 3)//input check
+							{
+								printf("\nInvalid input... Please try agian.\n");
+								viewret = fetchint();
+							}
+							switch(viewret)
+							{
+								case 1://edit
+									printf("\nPlease select an identifying symbol from the pool:\n(P)lanet, (S)tar, (H)arbor, (A)nomoly, (F)leet/Flotilla, (D)ebris, (O)ther, (B)attle, (N)atural fuel, b(E)acon\n");
+									do{
+										viewret = getchar();
+										cinclean();
+										if(viewret > 96)//change case
+										{
+											viewret -= 32;
+										}
+										if(viewret == 65 || viewret == 66 || viewret == 68 || viewret == 69 || viewret == 70 || viewret == 72 || viewret == 78 || viewret == 79 || viewret == 80 || viewret == 83)//break if input is valid
+										{
+											break;
+										}
+										printf("\nInvalid input, please try agian...\n");
+									}while(1);
+									if(viewret == 65 || viewret == 66 || viewret == 68 || viewret == 69 || viewret == 70 || viewret == 72 || viewret == 78 || viewret == 79 || viewret == 80 || viewret == 83)
+									{
+										sedittgt->sysmapc[uy][ux] = viewret;//set zone location on map
+									}
+									break;
+								case 2://delete
+									sedittgt->sysmapc[uy][ux] = 0;//clear zone from system map
+									znodedel(coordcompress32(find_me,coordcompress16(uy,ux)));//delete zone
+									return;
+								case 3://return to system
+									editmenu(find_me,'S');//recursive call to get back to system
+									return;
+								default:
+									printf("\nCritical error: Please press enter to begin shutdown process...\n");
+									cinclean();
+									uexit();
+									break;
+							}
+						}
+						break;
+					case 2:
+						printf("\nPlease input a new description that is 255 characters or less\n");
+						while(dyt == 0 && dxt < 254)//pull user string from input
+						{
+							stringbuffer[dxt] = getchar();
+							if(stringbuffer[dxt] == '\0' || stringbuffer[dxt] == '\n')
+							{
+								dyt = 1;//sets lcv to exit loop
+								stringbuffer[dxt] = 0;//guarentuees a null terminated string
+							}
+							dxt++;
+						}
+						stringbuffer[254] = 0;//null terminate description
+						for(int i = 0; i < 255; i++)//copy string
+						{
+							sedittgt->s_descrip[i] = stringbuffer[i];//copy string to system node description
+							if(stringbuffer[i] == 0)
+							{
+								i += 256;
+							}
+						}
+						//printf("\nstringbuffer is: %s\ns_descrip is: %s\n", stringbuffer, (sedittgt->s_descrip));
+						break;
+					default:
+						break;
+				}
+				break;
+			case 3:
+			
+				return;
+			default:
+				break;
+		}
+		break;
+	}
+	while(1)
+	{
+		dxt = 0;
+		dyt = 0;
+		if(type != 'Z')//add edit or return.
+		{
+			break;
+		}
+		printf("ZONE DATA:");
+		viewret = uniview(find_me,'Z');//print zone
+		if(viewret == -1)//if system exists, return to galaxy
+		{
+			printf("\nPress enter to return to galaxy...\n");
+			cinclean();
+			editmenu(-1,'G');
+			return;
+		}
+		while((zedittgt->zcompress) != find_me)//parse zone list
+		{
+			zedittgt = zedittgt->z_nextnode;
+		}
+		printf("\nWould you like to edit this description? (Y/N)\nSelecting no will return you to the system menu\n");
+		while(1)
+		{
+			viewret = getchar();
+			cinclean();
+			if(viewret >= 110)//case change
+			{
+				viewret -= 32;
+			}
+			if(viewret == 78 || viewret == 89)
+			{
+				break;
+			}
+			printf("\nInvalid input, please try agian...\n");
+		}
+		switch(viewret)
+		{
+			case 89:
+				printf("\nPlease input a new description that is 255 characters or less\n");
+				while(dyt == 0 && dxt < 254)//pull string from user input
+				{
+					stringbuffer[dxt] = getchar();
+					if(stringbuffer[dxt] == '\0' || stringbuffer[dxt] == '\n')
+					{
+						dyt = 1;//sets lcv to exit loop
+						stringbuffer[dxt] = 0;//guarentuees a null terminated string
+					}
+					dxt++;
+				}
+				stringbuffer[254] = 0;//null terminate user input
+				for(int i = 0; i < 255; i++)//copy string from buffer to zone node description
+				{
+					zedittgt->z_descrip[i] = stringbuffer[i];
+					if(stringbuffer[i] == 0)
+					{
+						i += 256;
+					}
+				}
+				//printf("\nstringbuffer is: %s\nz_descrip is: %s\n", stringbuffer, (zedittgt->z_descrip));
+			case 78:
+				break;
+			default:
+				printf("\nCritical error: Please press enter to begin shutdown process...\n");
+				cinclean();
+				uexit();
+				break;
+		}
+		break;
+	}
+	return;
+}
+
+void viewmenu(int32_t find_me, char type)//functions like edit menu, but will be a read function, rather than read write
+{//added an argument so the function can be called recursively and be able to return to the previous map
+	int ux,uy,compress = 0,viewret;//user x/y and compressed coordinates
+	while(1)//print galaxy
+	{
+		if(type != 'G')//invalid input at the galaxy level will force the user to run through to zone before being able to return fix this
+		{
+			break;
+		}
+		system("CLS");
+		printf("GALAXY VIEW:");
+		uniview(-1,'G');//print galaxy data
+		printf("\nPlease input an X(Column/Horizontal) value\n");
+		ux = fetchint();
+		while(ux < 1 || ux > 10)
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			ux = fetchint();
+		}
+		ux--;
+		printf("\nPlease input an Y(Row/Vertical) value\n");
+		uy = fetchint();
+		while(uy < 1 || uy > 10)
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			uy = fetchint();
+		}
+		uy--;
+		compress = coordcompress16(uy,ux);//compress user input
+		viewmenu(compress,'S');//recursive call to print selected system
+		system("CLS");
+		printf("1: Return to Galaxay\n2: Return to menu\n");//output/input for returning to galaxy or main menu
+		do{
+			ux = fetchint();
+			if(ux < 1 || ux > 2)
+			{
+				printf("\nInvalid input, please try agian...\n");
+			}
+		}while(ux < 1 || ux > 2);
+		switch(ux)
+		{
+			case 1:
+				continue;
+			case 2:
+				return;
+			default:
+				printf("\nCritical error occured...\nPlease press enter to begin shutdown process...\n");
+				cinclean();
+				uexit();
+				break;
+		}
+	}
+	while(1)//print system
+	{
+		if(type != 'S')//use type to prevent collisions between nodes in system and zone
+		{
+			break;
+		}
+		system("CLS");
+		printf("SYSTEM VIEW:");
+		viewret = uniview(find_me,'S');//print selected system
+		if(viewret == -1)
+		{
+			printf("\nPress enter to return to galaxy...\n");
+			cinclean();
+			return;
+		}
+		printf("\nPlease input an X(Column/Horizontal) value\n");
+		ux = fetchint();
+		while(ux < 1 || ux > 6)
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			ux = fetchint();
+		}
+		ux--;
+		printf("\nPlease input an Y(Row/Vertical) value\n");
+		uy = fetchint();
+		while(uy < 1 || uy > 6)
+		{
+			printf("\nInvalid input... Please try agian.\n");
+			uy = fetchint();
+		}
+		uy--;
+		compress = coordcompress32(find_me,coordcompress16(uy,ux));//compress zone and system coordinates
+		viewmenu(compress,'Z');//recursively call function to print selected zone
+		printf("1: Return to System\n2: Return to Galaxy\n");//return to system, or return to galaxy
+		do{
+		ux = fetchint();
+		if(ux < 1 || ux > 2)
+		{
+			printf("\nInvalid input, please try agian...\n");
+		}
+		}while(ux < 1 || ux > 2);
+		switch(ux)
+		{
+			case 1:
+				continue;
+			case 2:
+				return;
+			default:
+				printf("\nCritical error occured...\nPlease press enter to begin shutdown process...\n");
+				cinclean();
+				uexit();
+				break;
+		}
+	}
+	while(1)//print zone
+	{
+		if(type != 'Z')//use type to prevent collisions between system and zone
+		{
+			break;
+		}
+		system("CLS");
+		printf("ZONE DATA:");
+		uniview(find_me,'Z');//print zone
+		printf("\nPress the enter key to return to system...\n");
+		cinclean();
+		return;
+	}
+}
+
+void decomp16(int16_t tobreak, int *xcoord, int *ycoord)// decompression functions for any of the view or edits that need it
+{
+	int8_t ybuffer = 0;
+	ybuffer = tobreak ^ ybuffer;//xor, using 8 bit mask to exclude the xcoordinate
+	*ycoord = ybuffer;//storing y value in argument to return to what called the function 
+	tobreak = tobreak >> 8;//shift tobreak to only contain the xcoordinate
+	*xcoord = tobreak;//storing x value in return value
+}
+
+void decomp32(int32_t tobreak, int16_t *syscoord, int16_t *zonecoord)//this functions exactly like decomp 16, with differences only in the amount of bits in the variables, and a 16 bit shift rather than 8
+{
+	int16_t zonebuffer = 0;
+	zonebuffer = tobreak ^ zonebuffer;//xor with 16 bit mask, to seperate zone from system coordinates
+	*zonecoord = zonebuffer;//set zone coordinates to return to caller
+	tobreak = tobreak >> 16;//shift tobreak to only contain system coordinated
+	*syscoord = tobreak;//set system coordinates to return to caller
+}
 
 //---------------|| 							 							||--------------------------------------
 //---------------|| 	functions that do not manipulate data are below 	||--------------------------------------
 //---------------|| 	functions for data input are also below				||--------------------------------------
 
-int getmenu()
+int getmenu()//this function needs to be rebuilt so it can be used multiple times possibly recursivley, anticipate no nodes existing, or atleast one initial node depending on nodewipeall
 {
-	system("CLS");	//clear prompt to prevent excess clutter with multiple recursive calls
-	printf("To do: File I/O,Menu options, user identification, possible cryptographic functions involving I/O,Networking and sharing functions, set up keyboard macro for cd in cmd, anything i'm forgetting....\n");	
-	printf("Complete functions list: Menu(About, Exit)\n\n");
-	printf("Tabletop space map generator and handler\n/\\  /\\\n\\|/\\|/\n  \\/\n\n");			//splash screen
-	printf("Selection is done through inputing the number that corresponds with menu choice\n");		//user prompt
-	printf("1: Create World.\n2: Load World.\n3: Download World.\n4: Upload World.\n5: About.\n6: Exit.\n9: Crash test; currently savemap()\n");
-	galmap_dt *gtransmute = NULL;//galmap transmutable
-	sysmap_dt *stransmute = NULL;//sysmap transmutable
-	zonemap_dt *ztransmute = NULL;//zonemap transmutable
-	int uselect = getchar()-48;	//convert user input from ascii to signed integer
-	cinclean();
-	while((uselect < 1 || uselect > 6) && uselect != 9 && uselect != -637)//check for invalid input
-	{	
-		printf("Input value is invalid, please try agian.\n\n");
-		uselect = getmenu();	//reaqcuire input
-	}
-	switch(uselect)			//selection
-	{//considering changing all breaks to returns, this will allow recursive calls without the multirun bug (*lazy fix*, may come up with something more complex and cleaner at a later time)
-		case 1:		//Creation
-			gmapcreate(&gtransmute,&stransmute,&ztransmute);
-			break;
-		case 2:		//Load/Edit
-			loadmap();
-			originprint();
-			cinclean();
-			return 0;//placeholder used during construction of loadmap to prevent issues
-			break;
-		case 3:		//Download
-			undercon();
-			break;
-		case 4:		//Upload
-			undercon();
-			break;
-		case 5:		//About
-			uabout();
-			break;
-		case 6:		//Exit
-			uexit();
-			break;
-		case 9:
-			savemap();
-			uexit();
-			break;
-		default:
-			printf("\nUnknown input Error...\n");
-	}
-	originprint();
-	system("pause");
+	/*	CRASH TEST CHUNKS*/
+	int one, two, lcv = 1, uselect = 0;
+	int16_t oneone, twotwo;
+	galmap_dt *gtransmute;//galmap transmutable
+	sysmap_dt *stransmute;//sysmap transmutable
+	zonemap_dt *ztransmute;//zonemap transmutable
+	/**///this bit is to partition anything crash test may need so it is easy to remove and edit later
+	//printf("To do: edit, view manager, anything i'm forgetting....\n");	
+	do{
+		gtransmute = NULL;
+		stransmute = NULL;
+		ztransmute = NULL;
+		system("CLS");	//clear prompt to prevent excess clutter with multiple recursive calls
+		printf("Tabletop space map generator and handler\n/\\  /\\\n\\|/\\|/\n  \\/\n\n");			//splash screen
+		printf("Selection is done through inputing the number that corresponds with menu choice\n");		//user prompt
+		printf("1: Create World.\n2: Load World.\n3: About.\n4: Exit.\n");
+		uselect = getchar()-48;	//convert user input from ascii to signed integer
+		cinclean();
+		while((uselect < 1 || uselect > 4))//check for invalid input
+		{	
+			printf("Input value is invalid, please try agian.\n\n");
+			uselect = getmenu();	//reaqcuire input
+		}
+		switch(uselect)			//selection
+		{//considering changing all breaks to returns, this will allow recursive calls without the multirun bug (*lazy fix*, may come up with something more complex and cleaner at a later time)
+			case 1:		//Creation
+				gmapcreate(&gtransmute,&stransmute,&ztransmute);
+				break;
+			case 2:		//Load/Edit
+				loadmap();
+				//return 0;//placeholder used during construction of loadmap to prevent issues
+				break;
+			case 3:		//About
+				uabout();
+				break;
+			case 4:		//Exit
+				//uexit();
+				lcv = 0;
+				break;
+			default:
+				printf("\nUnknown input Error...\n");
+		}
+	}while(lcv);
 	return uselect;
 }
 
@@ -920,7 +1727,7 @@ void uabout()
 void cinclean()
 {
 	char trash = getchar();
-	while(trash != '\n' || trash == 0)
+	while(trash != '\n' || trash == 0)//parse remaining input to clear cinbuffer
 	{
 		trash = getchar();
 	}
@@ -1044,17 +1851,17 @@ char * stringcombine(char * s_sourceone,char * s_sourcetwo)
 	target = (char *) malloc(stringlength);// create array memory
 	while(index < stringlength)//copy
 	{
-		target[index] = s_sourceone[index];
+		target[index] = s_sourceone[index];//string one copying into combined string
 		if(target[index] == '\0')
 		{
 			for(int i = 0; i < (stringlength); i++)
 			{
-				target[index] = s_sourcetwo[i];
-				if(s_sourcetwo[i] == '\0')
+				target[index] = s_sourcetwo[i];//string two being appended
+				if(s_sourcetwo[i] == '\0')//making sure final character is null
 				{target[index] = 0;i += stringlength;}
 				index++;
 			}
-			index += stringlength;
+			index += stringlength;//killing while loop
 		}
 		index++;
 	}
@@ -1063,35 +1870,12 @@ char * stringcombine(char * s_sourceone,char * s_sourcetwo)
 
 /*
 Housecleaning todo:
--comment the stringcombine/copy functions
--savemap() needs a file open error check
 
-Index is:       90
-ZOPEN->COMP IS: 151586053
-
-i:      0       descrip80
-
-i:      1       descrip-16
-
-i:      2       descrip-70
-
-i:      3       descrip-99
-
-note too self: passing a pointer too a function does not work like a pass by reference
+saving after loading, causes the galaxy map to be saved twice it seems
+anytime a zone node would be created if it was not the only node, it would create a second -132 node, i have modified the deletes to have return values through out so while loops could be established to wipe out the spare nodes
 
 current known bugs:
 when about or any other input at main menu would create multiple recursive copies of main menu, upon completion of map generatio, the print function will be run multiple times as execution traverses the multiple copies of the menu function
-
-sysorigin's Scompress is: 2055
-s_nextnode is: 00000000006D86D0
-s_prevnode is: 00000000006D7CD0
-sysorigin address is 00000000006D7E10
-    F A
-  D   P D F
-    F   A
-A S     D E
-          S
-        E
 		
 first procedural output:(has sentimental value?)
 S       S       S S
@@ -1104,21 +1888,4 @@ S     S   S S S
               S S S
   S         S     S
           S       S
-*/
-
-/*
-Fetchint reports a result of: 10
-Beginning origin node printing...
-galorigin array dump is:
-S S S S S S       S
-S       S S S
-S S S       S S S S
-S   S   S S   S S
-  S S S       S   S
-S             S
-      S       S S
-      S S     S S
-S   S S S S     S
-  S S S   S S S   S
-
 */
